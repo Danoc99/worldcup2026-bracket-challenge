@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local `wrangler pages dev`. Never commit the real key.
+FOOTBALL_DATA_KEY=your_football_data_org_token_here

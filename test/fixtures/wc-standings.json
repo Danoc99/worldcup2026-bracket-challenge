@@ -1,0 +1,760 @@
+{
+  "standings": [
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_A",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Mexico",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 3,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Korea Republic",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 3,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "South Africa",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 3,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Czech Republic",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 3,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_B",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Canada",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Switzerland",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Qatar",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Bosnia-Herzegovina",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_C",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Brazil",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Scotland",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Morocco",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Haiti",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_D",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "USA",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Paraguay",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Australia",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Türkiye",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_E",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Germany",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Ecuador",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Côte d'Ivoire",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Curaçao",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_F",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Netherlands",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Japan",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Tunisia",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Sweden",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_G",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Belgium",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "IR Iran",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Egypt",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "New Zealand",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_H",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Spain",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Uruguay",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Saudi Arabia",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Cabo Verde",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_I",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "France",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Norway",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Senegal",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Iraq",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_J",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Argentina",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Austria",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Algeria",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Jordan",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_K",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "Portugal",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Colombia",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Uzbekistan",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Congo DR",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    },
+    {
+      "stage": "GROUP_STAGE",
+      "type": "TOTAL",
+      "group": "GROUP_L",
+      "table": [
+        {
+          "position": 1,
+          "team": {
+            "id": 1000,
+            "name": "England",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 9,
+          "goalsFor": 5,
+          "goalsAgainst": 0,
+          "goalDifference": 5
+        },
+        {
+          "position": 2,
+          "team": {
+            "id": 1001,
+            "name": "Croatia",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 7,
+          "goalsFor": 5,
+          "goalsAgainst": 1,
+          "goalDifference": 4
+        },
+        {
+          "position": 3,
+          "team": {
+            "id": 1002,
+            "name": "Ghana",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 5,
+          "goalsFor": 5,
+          "goalsAgainst": 2,
+          "goalDifference": 3
+        },
+        {
+          "position": 4,
+          "team": {
+            "id": 1003,
+            "name": "Panama",
+            "tla": null,
+            "crest": ""
+          },
+          "playedGames": 2,
+          "points": 3,
+          "goalsFor": 5,
+          "goalsAgainst": 3,
+          "goalDifference": 2
+        }
+      ]
+    }
+  ]
+}

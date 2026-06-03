@@ -1,0 +1,10 @@
+# Cloudflare Pages config. The KV binding name MUST be "POOL".
+name = "wc2026-bracket"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "dist"
+
+# After you create a KV namespace (see README), paste its id below.
+# You can also bind KV entirely from the Cloudflare dashboard instead.
+[[kv_namespaces]]
+binding = "POOL"
+id = "01f9be5d023445ceac7c46d7afd007a7"

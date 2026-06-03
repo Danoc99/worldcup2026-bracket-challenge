@@ -1,0 +1,69 @@
+import fs from "fs";
+import assert from "assert";
+import { ordersFromStandings } from "../functions/_lib/transform.js";
+import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
+
+// Our canonical groups (must match the front end)
+const GROUPS = {
+  A: ["Mexico", "South Korea", "South Africa", "Czechia"],
+  B: ["Canada", "Switzerland", "Qatar", "Bosnia and Herzegovina"],
+  C: ["Brazil", "Scotland", "Morocco", "Haiti"],
+  D: ["United States", "Paraguay", "Australia", "Türkiye"],
+  E: ["Germany", "Ecuador", "Ivory Coast", "Curaçao"],
+  F: ["Netherlands", "Japan", "Tunisia", "Sweden"],
+  G: ["Belgium", "Iran", "Egypt", "New Zealand"],
+  H: ["Spain", "Uruguay", "Saudi Arabia", "Cape Verde"],
+  I: ["France", "Norway", "Senegal", "Iraq"],
+  J: ["Argentina", "Austria", "Algeria", "Jordan"],
+  K: ["Portugal", "Colombia", "Uzbekistan", "DR Congo"],
+  L: ["England", "Croatia", "Ghana", "Panama"],
+};
+
+let pass = 0, fail = 0;
+const ok = (name, cond) => { if (cond) { pass++; } else { fail++; console.log("  ✗ " + name); } };
+
+// 1) Every canonical team appears in exactly one group (sanity of our own data)
+const allCanon = Object.values(GROUPS).flat();
+ok("48 teams total", allCanon.length === 48);
+ok("48 unique teams", new Set(allCanon).size === 48);
+ok("teamMap knows all 48", allCanon.every((t) => CANONICAL_TEAMS.includes(t)));
+
+// 2) Transform the realistic (tricky-name) API payload
+const json = JSON.parse(fs.readFileSync(new URL("./fixtures/wc-standings.json", import.meta.url)));
+const { groups, unmapped } = ordersFromStandings(json);
+
+ok("no unmapped team names", unmapped.length === 0);
+if (unmapped.length) console.log("    unmapped:", [...new Set(unmapped)]);
+
+ok("all 12 groups parsed", Object.keys(groups).length === 12);
+
+// 3) Each parsed group contains exactly the 4 correct teams (as a set)
+for (const L of Object.keys(GROUPS)) {
+  const got = groups[L]?.order || [];
+  const same = got.length === 4 && new Set(got).size === 4 &&
+    [...got].sort().join("|") === [...GROUPS[L]].sort().join("|");
+  ok(`group ${L} maps to correct 4 teams`, same);
+}
+
+// 4) Status detection: A finished (3 games), others live (2 games)
+ok("group A detected final", groups.A?.status === "final");
+ok("group B detected live", groups.B?.status === "live");
+
+// 5) Scoring matrix sanity (mirrors front end)
+const M = [[25,15,5,0],[15,20,5,0],[5,5,15,0],[0,0,0,0]];
+function scoreGroup(pred, actual) {
+  let p = 0;
+  for (let a = 0; a < 4; a++) { const i = pred.indexOf(actual[a]); if (i >= 0) p += M[a][i]; }
+  return p;
+}
+const actual = ["Türkiye", "United States", "Australia", "Paraguay"];
+ok("perfect group = 60", scoreGroup(["Türkiye","United States","Australia","Paraguay"], actual) === 60);
+ok("swapped top two (3rd/4th exact) = 45", scoreGroup(["United States","Türkiye","Australia","Paraguay"], actual) === 45);
+// Pitfall: 4th place must never contribute points.
+ok("4th-place row is all zeros", M[3].every((v) => v === 0));
+// Scrambled top three, correct 4th -> scores only the top-three partial credit, nothing for the 4th.
+ok("scrambled top 3 + correct 4th = 25",
+   scoreGroup(["United States","Australia","Türkiye","Paraguay"], actual) === 25);
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
