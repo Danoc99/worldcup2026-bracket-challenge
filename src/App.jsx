@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronUp, ChevronDown, Trophy, Lock, Unlock, Crown, Settings,
   Save, Check, RefreshCw, Medal, Users, ListOrdered, X, EyeOff, Wifi, Trash2,
-  GripVertical,
+  GripVertical, HelpCircle,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
@@ -99,10 +99,95 @@ function Header({ config, locked, now }) {
       <h1 style={{ fontFamily: "var(--display)", fontSize: "clamp(34px,8vw,64px)", lineHeight: .95, margin: "6px 0 0", letterSpacing: 1, background: "linear-gradient(110deg,#1fb574 0%,#f5c542 70%)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
         {config.poolName || "BRACKET CHALLENGE"}
       </h1>
-      <div style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
-        {locked
-          ? <><Lock size={15} style={{ color: "var(--gold)" }} /><span style={{ fontWeight: 700 }}>Picks locked</span><span style={{ color: "var(--muted)" }}>— tournament underway</span></>
-          : <><Unlock size={15} style={{ color: "var(--green)" }} /><span style={{ fontWeight: 700 }}>Picks lock in {d}d {h}h {m}m</span></>}
+      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
+          {locked
+            ? <><Lock size={15} style={{ color: "var(--gold)" }} /><span style={{ fontWeight: 700 }}>Picks locked</span><span style={{ color: "var(--muted)" }}>— tournament underway</span></>
+            : <><Unlock size={15} style={{ color: "var(--green)" }} /><span style={{ fontWeight: 700 }}>Picks lock in {d}d {h}h {m}m</span></>}
+        </div>
+        <HelpPill />
+      </div>
+    </div>
+  );
+}
+
+function HelpPill() {
+  const [show, setShow] = useState(false);
+  return (
+    <>
+      <button className="btn" onClick={() => setShow(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
+        <HelpCircle size={15} style={{ color: "var(--pitch)" }} /> How it works
+      </button>
+      {show && <HelpModal onClose={() => setShow(false)} />}
+    </>
+  );
+}
+
+function HelpModal({ onClose }) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto", zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 640, width: "100%", margin: "40px 0", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontFamily: "var(--display)", fontSize: 26, color: "var(--gold)" }}>HOW IT WORKS</div>
+          <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 8 }}><X size={16} /></button>
+        </div>
+
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>How points work</div>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 8px", lineHeight: 1.5 }}>You earn points for each group based on how close your predicted finishing order matches the real result.</p>
+          <ul style={{ color: "var(--muted)", fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+            <li>Exact slot match → max points: <b style={{ color: "var(--text)" }}>25</b> for 1st, <b style={{ color: "var(--text)" }}>20</b> for 2nd, <b style={{ color: "var(--text)" }}>15</b> for 3rd</li>
+            <li>Off by one or two slots → partial credit (5–15 pts)</li>
+            <li>Predict ANY team to finish 4th → <b style={{ color: "var(--text)" }}>0 pts</b> no matter what</li>
+          </ul>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: "8px 0 0", lineHeight: 1.5 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b>, so the group stage alone is worth up to <b style={{ color: "var(--text)" }}>720</b>.</p>
+        </div>
+
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Example — you picked Brazil 1st</div>
+          <ul style={{ color: "var(--muted)", fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+            <li>Brazil finishes 1st → <b style={{ color: "var(--green)" }}>25 pts</b></li>
+            <li>Brazil finishes 2nd → <b style={{ color: "var(--text)" }}>15 pts</b> (partial credit, off by one)</li>
+            <li>Brazil finishes 3rd → <b style={{ color: "var(--text)" }}>5 pts</b></li>
+            <li>Brazil finishes 4th → <b style={{ color: "var(--muted)" }}>0 pts</b></li>
+          </ul>
+        </div>
+
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Projected vs. Final points</div>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 6px", lineHeight: 1.5 }}><b style={{ color: "var(--red)" }}>Projected (~12)</b> — the group is still being played. Points update as games happen.</p>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 6px", lineHeight: 1.5 }}><b style={{ color: "var(--green)" }}>Final (+15)</b> — the group has played all 12 of its matches. Points are locked in.</p>
+          <p style={{ color: "var(--muted)", fontSize: 12, margin: 0, fontStyle: "italic" }}>Your leaderboard total mixes both.</p>
+        </div>
+
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>Color meanings on the Standings tab</div>
+          <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px" }}>Tap your own bracket to expand your per-group breakdown.</p>
+          <div style={{ display: "grid", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+              <span style={{ color: "var(--red)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Red name</span>
+              <span>You picked this team for this slot AND it's currently in that slot, but the group is still live. Earning projected points; can change.</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+              <span style={{ color: "var(--green)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Green name ✓</span>
+              <span>Same as red, but the group is officially done. Points locked in.</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>White name</span>
+              <span>Team isn't in the exact slot you picked. You may STILL be earning partial credit if it's one or two slots off — that just doesn't show as a color.</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+              <span style={{ color: "var(--text)", opacity: .55, fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Dimmed 4th</span>
+              <span>4th place is always worth 0 pts, so the row is faded as a reminder.</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px" }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>TL;DR</div>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: 0, lineHeight: 1.5 }}>Red and green = slot-perfect hits. White can still score partial credit. 4th never scores. Projected can change; Final is locked in.</p>
+        </div>
+
       </div>
     </div>
   );
