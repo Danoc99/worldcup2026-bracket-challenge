@@ -66,13 +66,11 @@ will be added after the Round of 32 is set on June 28.
 - `npx wrangler pages dev dist --kv POOL`  → full app + Functions locally
 
 ## Recently shipped
+- **2026-06-04 — Lock blocks new entries after LOCK_ISO** ([PR #4](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/4), merge `9263cac`). `functions/api/entry.js` now rejects any POST after `LOCK_ISO` — new or edit — not just edits (dropped the `&& existing` guard). Added 5 tests in `test/transform.test.mjs` that mock `Date.now` and a fake `POOL` around `onRequestPost` to cover before-lock accept, after-lock new-entry reject, and after-lock edit reject (regression guard).
 - **2026-06-04 — World Cup color scheme (Pitch & Trophy)** ([PR #3](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/3), merge `fcb3ffa`). Replaced the pink/gold palette with a football-themed green/gold scheme. Dropped `--mag`; added `--pitch` (brand) and `--red` (live/alert/delete). Re-tinted bg/card/line/text/muted toward dark pitch. Frontend only.
 - **2026-06-04 — Admin: delete a bracket** ([PR #1](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/1), merge `2b3df6e`). New `deleteEntry` action on `POST /api/admin` (admin-pass-checked, slugs the name, KV-deletes `entry:<slug>`) plus an ENTRIES card at the top of the admin modal with per-row Delete.
 
 ## Task backlog (do these as separate branches, in this order)
-2. **Fix the lock.** `functions/api/entry.js` currently blocks *edits* after lock
-   but still allows *new* brackets to be created after lock. After `LOCK_ISO`, reject
-   BOTH new entries and edits. Add/adjust a test.
 4. **Multiple pools (e.g. "Friends" and "Family").** The only architectural change.
    - Namespace per-pool keys: `pool:<poolId>:config`, `pool:<poolId>:entry:<slug>`.
    - **Keep standings GLOBAL:** `cache:standings` and `manualResults` stay shared
