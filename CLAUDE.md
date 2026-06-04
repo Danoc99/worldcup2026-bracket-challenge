@@ -66,6 +66,8 @@ will be added after the Round of 32 is set on June 28.
 - `npx wrangler pages dev dist --kv POOL`  → full app + Functions locally
 
 ## Recently shipped
+- **2026-06-04 — "How it works" help modal** ([PR #6](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/6), merge `015fcd6`). New `HelpPill` next to the lock countdown in the header opens a `HelpModal` explaining scoring, projected-vs-final points, and the red/green/white/dimmed colors on the Standings tab. Frontend only; not a numbered backlog task.
+- **2026-06-04 — Drag-and-drop reordering for group picks** ([PR #5](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/5), merge `8bc4ac0`). `GroupCard` now uses `@dnd-kit/sortable` instead of up/down arrow buttons. Drag with mouse/touch, or Tab+Space+Arrows+Space for keyboard. `PicksTab.move(g,idx,dir)` replaced with `reorder(g, newOrder)`. Locked state renders a static `StaticRow`; editable state uses `DndContext`+`SortableContext`+`SortableRow` with a `GripVertical` handle. Admin modal still uses arrows (out of scope).
 - **2026-06-04 — Lock blocks new entries after LOCK_ISO** ([PR #4](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/4), merge `9263cac`). `functions/api/entry.js` now rejects any POST after `LOCK_ISO` — new or edit — not just edits (dropped the `&& existing` guard). Added 5 tests in `test/transform.test.mjs` that mock `Date.now` and a fake `POOL` around `onRequestPost` to cover before-lock accept, after-lock new-entry reject, and after-lock edit reject (regression guard).
 - **2026-06-04 — World Cup color scheme (Pitch & Trophy)** ([PR #3](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/3), merge `fcb3ffa`). Replaced the pink/gold palette with a football-themed green/gold scheme. Dropped `--mag`; added `--pitch` (brand) and `--red` (live/alert/delete). Re-tinted bg/card/line/text/muted toward dark pitch. Frontend only.
 - **2026-06-04 — Admin: delete a bracket** ([PR #1](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/1), merge `2b3df6e`). New `deleteEntry` action on `POST /api/admin` (admin-pass-checked, slugs the name, KV-deletes `entry:<slug>`) plus an ENTRIES card at the top of the admin modal with per-row Delete.
@@ -78,12 +80,6 @@ will be added after the Round of 32 is set on June 28.
    - Add pool selection in the UI and a `poolId` to the relevant API calls.
    - Plan a migration for the existing single-pool `config`/entries (or start fresh
      after deleting test data). Propose the plan and wait for approval before coding.
-5. **Drag-and-drop reordering for group picks.** Frontend only (`src/App.jsx` —
-   `GroupCard`). Replace the up/down arrow buttons with drag-and-drop reordering of
-   the 4 teams within each group. Must stay lock-aware (no drag after `LOCK_ISO`)
-   and keep keyboard accessibility — either retain the arrows as a fallback or use a
-   library that gives keyboard reordering for free. Admin modal's reorder UI can
-   stay arrow-based for now.
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
