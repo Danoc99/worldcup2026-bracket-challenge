@@ -1,4 +1,4 @@
-import { json, hashStr } from "../_lib/util.js";
+import { json, hashStr, slug } from "../_lib/util.js";
 
 const LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
 
@@ -16,6 +16,17 @@ export async function onRequestPost({ request, env }) {
 
   // verify-only ping (used to unlock the admin panel)
   if (body.action === "verify") return json({ ok: true });
+
+  // delete a single entry by name (slugged to match the KV key)
+  if (body.action === "deleteEntry") {
+    const s = slug(body.name || "");
+    if (!s) return json({ error: "Missing entry name." }, 400);
+    const key = `entry:${s}`;
+    const existing = await POOL.get(key);
+    if (!existing) return json({ error: "Entry not found." }, 404);
+    await POOL.delete(key);
+    return json({ ok: true, deleted: s });
+  }
 
   // save overrides: body.groups = { A: {order:[4], status:"live"|"final"} | null, ... }
   let manual = { groups: {} };
