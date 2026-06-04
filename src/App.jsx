@@ -61,8 +61,8 @@ function FontAndTheme() {
   return (
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Anton&family=Sora:wght@400;500;600;700;800&display=swap');
-      :root{ --bg:#0a0e19; --bg2:#10162a; --card:#141b30; --card2:#18203a; --line:#26314c;
-        --text:#eef2f9; --muted:#8c99b6; --gold:#ffd24a; --mag:#ff3d77; --green:#2ee6a6;
+      :root{ --bg:#0b1410; --bg2:#0f1c14; --card:#122019; --card2:#16271d; --line:#1f3328;
+        --text:#eef5ef; --muted:#8aa097; --gold:#f5c542; --pitch:#1fb574; --green:#2ee6a6; --red:#e63946;
         --display:'Anton',sans-serif; --body:'Sora',system-ui,sans-serif; }
       *{box-sizing:border-box;} body{margin:0;background:var(--bg);}
       .spin{animation:spin 1s linear infinite;} @keyframes spin{to{transform:rotate(360deg);}}
@@ -85,10 +85,10 @@ function Header({ config, locked, now }) {
   const m = Math.max(0, Math.floor((remain % 3600000) / 60000));
   return (
     <div className="rise" style={{ paddingTop: 28, paddingBottom: 8 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--mag)", fontWeight: 700, letterSpacing: 2, fontSize: 12, textTransform: "uppercase" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--pitch)", fontWeight: 700, letterSpacing: 2, fontSize: 12, textTransform: "uppercase" }}>
         <Trophy size={15} /> World Cup 2026 · Group Stage
       </div>
-      <h1 style={{ fontFamily: "var(--display)", fontSize: "clamp(34px,8vw,64px)", lineHeight: .95, margin: "6px 0 0", letterSpacing: 1, background: "linear-gradient(110deg,#ff3d77 0%,#ffd24a 70%)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+      <h1 style={{ fontFamily: "var(--display)", fontSize: "clamp(34px,8vw,64px)", lineHeight: .95, margin: "6px 0 0", letterSpacing: 1, background: "linear-gradient(110deg,#1fb574 0%,#f5c542 70%)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
         {config.poolName || "BRACKET CHALLENGE"}
       </h1>
       <div style={{ marginTop: 12, display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
@@ -107,7 +107,7 @@ function Tabs({ tab, setTab, count }) {
       {items.map((it) => {
         const on = tab === it.id;
         return (
-          <button key={it.id} className="btn" onClick={() => setTab(it.id)} style={{ flex: 1, padding: "12px 10px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: on ? "linear-gradient(110deg,#ff3d77,#ffd24a)" : "var(--card)", color: on ? "#1a1023" : "var(--text)", border: on ? "none" : "1px solid var(--line)", fontSize: 15 }}>
+          <button key={it.id} className="btn" onClick={() => setTab(it.id)} style={{ flex: 1, padding: "12px 10px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: on ? "linear-gradient(110deg,#1fb574,#f5c542)" : "var(--card)", color: on ? "#0b1410" : "var(--text)", border: on ? "none" : "1px solid var(--line)", fontSize: 15 }}>
             <it.icon size={17} /> {it.label}
           </button>
         );
@@ -127,7 +127,7 @@ function SetupCard({ onDone }) {
   }
   return (
     <div className="rise" style={{ paddingTop: 60 }}>
-      <div style={{ fontFamily: "var(--display)", fontSize: 40, background: "linear-gradient(110deg,#ff3d77,#ffd24a)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>SET UP YOUR POOL</div>
+      <div style={{ fontFamily: "var(--display)", fontSize: 40, background: "linear-gradient(110deg,#1fb574,#f5c542)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>SET UP YOUR POOL</div>
       <p style={{ color: "var(--muted)", marginTop: 4 }}>One-time setup. Whoever does this is the admin.</p>
       <Card>
         <Label>Pool name</Label>
@@ -135,7 +135,7 @@ function SetupCard({ onDone }) {
         <Label style={{ marginTop: 14 }}>Admin password</Label>
         <TextInput value={pw} onChange={setPw} placeholder="for overriding results" type="password" />
         {err && <Note bad>{err}</Note>}
-        <button className="btn" disabled={busy} onClick={create} style={{ marginTop: 18, width: "100%", padding: 14, background: "linear-gradient(110deg,#ff3d77,#ffd24a)", color: "#1a1023", fontSize: 16 }}>{busy ? "Creating…" : "Create pool"}</button>
+        <button className="btn" disabled={busy} onClick={create} style={{ marginTop: 18, width: "100%", padding: 14, background: "linear-gradient(110deg,#1fb574,#f5c542)", color: "#0b1410", fontSize: 16 }}>{busy ? "Creating…" : "Create pool"}</button>
       </Card>
     </div>
   );
@@ -186,7 +186,7 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
           <Label style={{ marginTop: 14 }}>PIN</Label>
           <TextInput value={pin} onChange={setPin} placeholder="4 digits is plenty" type="password" />
           {status && <Note bad={status.bad}>{status.msg}</Note>}
-          <button className="btn" onClick={enter} style={{ marginTop: 16, width: "100%", padding: 13, background: "linear-gradient(110deg,#ff3d77,#ffd24a)", color: "#1a1023", fontSize: 15 }}>Start my bracket</button>
+          <button className="btn" onClick={enter} style={{ marginTop: 16, width: "100%", padding: 13, background: "linear-gradient(110deg,#1fb574,#f5c542)", color: "#0b1410", fontSize: 15 }}>Start my bracket</button>
         </Card>
         <ScoringKey />
       </div>
@@ -197,7 +197,7 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
   return (
     <div className="rise">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Users size={16} style={{ color: "var(--mag)" }} /><span style={{ fontWeight: 700 }}>Playing as {me.name}</span></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Users size={16} style={{ color: "var(--pitch)" }} /><span style={{ fontWeight: 700 }}>Playing as {me.name}</span></div>
         <button className="btn" onClick={() => saveMe(null)} style={{ background: "transparent", color: "var(--muted)", border: "1px solid var(--line)", padding: "6px 12px", fontSize: 13 }}>Switch</button>
       </div>
       {locked
@@ -208,7 +208,7 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
       ))}
       {status && <Note bad={status.bad}>{status.msg}</Note>}
       {!locked && (
-        <button className="btn" disabled={busy} onClick={save} style={{ marginTop: 16, width: "100%", padding: 15, background: "linear-gradient(110deg,#ff3d77,#ffd24a)", color: "#1a1023", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <button className="btn" disabled={busy} onClick={save} style={{ marginTop: 16, width: "100%", padding: 15, background: "linear-gradient(110deg,#1fb574,#f5c542)", color: "#0b1410", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           {busy ? <><RefreshCw size={17} className="spin" /> Saving…</> : <><Save size={17} /> Save my bracket</>}
         </button>
       )}
@@ -243,7 +243,7 @@ function GroupCard({ g, order, onMove, locked }) {
 }
 function PosBadge({ idx, small }) {
   const mm = POS_META[idx]; const s = small ? 22 : 28;
-  return <div style={{ width: s, height: s, minWidth: s, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: small ? 10 : 12, color: idx === 3 ? "var(--muted)" : "#1a1023", background: idx === 3 ? "transparent" : mm.color, border: idx === 3 ? "1px solid var(--line)" : "none" }}>{mm.label}</div>;
+  return <div style={{ width: s, height: s, minWidth: s, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: small ? 10 : 12, color: idx === 3 ? "var(--muted)" : "#0b1410", background: idx === 3 ? "transparent" : mm.color, border: idx === 3 ? "1px solid var(--line)" : "none" }}>{mm.label}</div>;
 }
 
 /* ------------------------------ standings -------------------------------- */
@@ -266,7 +266,7 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
   return (
     <div className="rise">
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, fontSize: 13, color: "var(--muted)", flexWrap: "wrap" }}>
-        {anyLive && <span className="pulse" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--mag)", fontWeight: 800, letterSpacing: 1 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--mag)" }} />LIVE</span>}
+        {anyLive && <span className="pulse" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--red)", fontWeight: 800, letterSpacing: 1 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--red)" }} />LIVE</span>}
         {anyResults
           ? <span>{finalCount} final · {liveCount} projected · {12 - counted.length} to come</span>
           : <span>{locked ? "Tournament underway — standings update automatically." : "Standings light up once games start."}</span>}
@@ -277,11 +277,11 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
         const isMe = slug(r.name) === slug(me?.name || ""); const medal = i < 3 && anyResults;
         return (
           <div key={r.name} style={{ marginBottom: 10 }}>
-            <Card style={{ padding: 0, border: isMe ? "1px solid var(--mag)" : "1px solid var(--line)" }}>
+            <Card style={{ padding: 0, border: isMe ? "1px solid var(--pitch)" : "1px solid var(--line)" }}>
               <button className="btn" onClick={() => setOpen(open === r.name ? null : r.name)} style={{ width: "100%", background: "transparent", color: "var(--text)", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", textAlign: "left" }}>
                 <div style={{ fontFamily: "var(--display)", fontSize: 22, width: 30, color: medal ? POS_META[i].color : "var(--muted)" }}>{medal ? <Medal size={22} style={{ color: POS_META[i].color }} /> : i + 1}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{r.name} {isMe && <span style={{ color: "var(--mag)", fontSize: 12, fontWeight: 700 }}>· you</span>}</div>
+                  <div style={{ fontWeight: 700, fontSize: 16 }}>{r.name} {isMe && <span style={{ color: "var(--pitch)", fontSize: 12, fontWeight: 700 }}>· you</span>}</div>
                   {!anyResults && <div style={{ color: "var(--muted)", fontSize: 12 }}>bracket submitted</div>}
                 </div>
                 {anyResults && (
@@ -309,22 +309,22 @@ function PlayerBreakdown({ entry, groups, locked, isMe }) {
         const isLive = r?.status === "live"; const isFinal = r?.status === "final";
         const pts = r ? scoreGroup(pred, r.order) : null;
         return (
-          <div key={g} style={{ background: "var(--bg2)", border: `1px solid ${isLive ? "rgba(255,61,119,.35)" : "var(--line)"}`, borderRadius: 10, padding: "8px 10px" }}>
+          <div key={g} style={{ background: "var(--bg2)", border: `1px solid ${isLive ? "rgba(230,57,70,.35)" : "var(--line)"}`, borderRadius: 10, padding: "8px 10px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <span style={{ fontFamily: "var(--display)", fontSize: 14, color: "var(--gold)" }}>GRP {g}</span>
-              {r ? <span style={{ fontWeight: 800, fontSize: 13, color: isLive ? "var(--mag)" : "var(--green)" }}>{isLive ? "~" : "+"}{pts}</span> : <span style={{ fontSize: 10, color: "#46506b" }}>—</span>}
+              {r ? <span style={{ fontWeight: 800, fontSize: 13, color: isLive ? "var(--red)" : "var(--green)" }}>{isLive ? "~" : "+"}{pts}</span> : <span style={{ fontSize: 10, color: "#46506b" }}>—</span>}
             </div>
             {pred.map((t, i) => {
               const correct = isFinal && r.order[i] === t; const liveMatch = isLive && r.order[i] === t;
               return (
                 <div key={t} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, opacity: i === 3 ? .55 : 1, marginBottom: 2 }}>
                   <span style={{ color: "var(--muted)", width: 10 }}>{i + 1}</span><span>{FLAG[t]}</span>
-                  <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: correct ? "var(--green)" : liveMatch ? "var(--mag)" : "var(--text)" }}>{t}</span>
+                  <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: correct ? "var(--green)" : liveMatch ? "var(--red)" : "var(--text)" }}>{t}</span>
                   {correct && <Check size={12} style={{ color: "var(--green)" }} />}
                 </div>
               );
             })}
-            {isLive && <div style={{ marginTop: 4, fontSize: 9, letterSpacing: 1, fontWeight: 800, color: "var(--mag)" }}>PROJECTED</div>}
+            {isLive && <div style={{ marginTop: 4, fontSize: 9, letterSpacing: 1, fontWeight: 800, color: "var(--red)" }}>PROJECTED</div>}
           </div>
         );
       })}
@@ -385,7 +385,7 @@ function AdminModal({ groups, entries, reload, onClose }) {
             <Label>Admin password</Label>
             <TextInput value={pw} onChange={(v) => { setPw(v); setErr(null); }} type="password" placeholder="password" />
             {err && <Note bad>{err}</Note>}
-            <button className="btn" onClick={login} style={{ marginTop: 14, width: "100%", padding: 12, background: "linear-gradient(110deg,#ff3d77,#ffd24a)", color: "#1a1023" }}>Unlock</button>
+            <button className="btn" onClick={login} style={{ marginTop: 14, width: "100%", padding: 12, background: "linear-gradient(110deg,#1fb574,#f5c542)", color: "#0b1410" }}>Unlock</button>
           </div>
         ) : (
           <div>
@@ -397,7 +397,7 @@ function AdminModal({ groups, entries, reload, onClose }) {
                 entries.map((e) => (
                   <div key={e.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid var(--line)" }}>
                     <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{e.name}</span>
-                    <button className="btn" disabled={deleting === e.name} onClick={() => deleteEntry(e.name)} style={{ background: "transparent", border: "1px solid rgba(255,61,119,.35)", color: "var(--mag)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5, opacity: deleting === e.name ? .5 : 1 }}>
+                    <button className="btn" disabled={deleting === e.name} onClick={() => deleteEntry(e.name)} style={{ background: "transparent", border: "1px solid rgba(230,57,70,.35)", color: "var(--red)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5, opacity: deleting === e.name ? .5 : 1 }}>
                       {deleting === e.name ? <RefreshCw size={12} className="spin" /> : <Trash2 size={12} />} Delete
                     </button>
                   </div>
@@ -405,15 +405,15 @@ function AdminModal({ groups, entries, reload, onClose }) {
               )}
             </div>
             <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>
-              Standings update from the live feed on their own — you usually don't need to touch this. Use it only to <b style={{ color: "var(--muted)" }}>override</b> a group: <b style={{ color: "var(--text)" }}>Auto</b> follows the feed, <b style={{ color: "var(--mag)" }}>Live</b>/<b style={{ color: "var(--green)" }}>Final</b> force your own order (handy for fixing an official tiebreaker the feed gets wrong).
+              Standings update from the live feed on their own — you usually don't need to touch this. Use it only to <b style={{ color: "var(--muted)" }}>override</b> a group: <b style={{ color: "var(--text)" }}>Auto</b> follows the feed, <b style={{ color: "var(--red)" }}>Live</b>/<b style={{ color: "var(--green)" }}>Final</b> force your own order (handy for fixing an official tiebreaker the feed gets wrong).
             </p>
             {GROUP_IDS.map((g) => (
-              <div key={g} style={{ background: "var(--card)", border: `1px solid ${mode[g] === "live" ? "rgba(255,61,119,.35)" : mode[g] === "final" ? "rgba(46,230,166,.3)" : "var(--line)"}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
+              <div key={g} style={{ background: "var(--card)", border: `1px solid ${mode[g] === "live" ? "rgba(230,57,70,.35)" : mode[g] === "final" ? "rgba(46,230,166,.3)" : "var(--line)"}`, borderRadius: 12, padding: "10px 12px", marginBottom: 10 }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)" }}>GROUP {g}</span>
                   <div style={{ display: "flex", gap: 4, background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 9, padding: 3 }}>
-                    {MODES.map((s) => { const on = mode[g] === s.k; const c = s.k === "live" ? "var(--mag)" : s.k === "final" ? "var(--green)" : "var(--muted)";
-                      return <button key={s.k} className="btn" onClick={() => setMode((p) => ({ ...p, [g]: s.k }))} style={{ padding: "4px 12px", fontSize: 12, borderRadius: 6, background: on ? c : "transparent", color: on ? (s.k === "auto" ? "#1a1023" : "#0a1410") : "var(--muted)" }}>{s.label}</button>;
+                    {MODES.map((s) => { const on = mode[g] === s.k; const c = s.k === "live" ? "var(--red)" : s.k === "final" ? "var(--green)" : "var(--muted)";
+                      return <button key={s.k} className="btn" onClick={() => setMode((p) => ({ ...p, [g]: s.k }))} style={{ padding: "4px 12px", fontSize: 12, borderRadius: 6, background: on ? c : "transparent", color: on ? (s.k === "auto" ? "#0b1410" : "#0a1410") : "var(--muted)" }}>{s.label}</button>;
                     })}
                   </div>
                 </div>
@@ -429,7 +429,7 @@ function AdminModal({ groups, entries, reload, onClose }) {
               </div>
             ))}
             {msg && <Note bad={msg.startsWith("ERR")}>{msg.replace(/^ERR: /, "")}</Note>}
-            <button className="btn" disabled={busy} onClick={save} style={{ marginTop: 8, width: "100%", padding: 14, background: "linear-gradient(110deg,#ff3d77,#ffd24a)", color: "#1a1023", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{busy ? <><RefreshCw size={16} className="spin" /> Saving…</> : <><Save size={16} /> Save overrides</>}</button>
+            <button className="btn" disabled={busy} onClick={save} style={{ marginTop: 8, width: "100%", padding: 14, background: "linear-gradient(110deg,#1fb574,#f5c542)", color: "#0b1410", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>{busy ? <><RefreshCw size={16} className="spin" /> Saving…</> : <><Save size={16} /> Save overrides</>}</button>
           </div>
         )}
       </div>
@@ -465,6 +465,6 @@ function Card({ children, style }) { return <div style={{ background: "var(--car
 function Label({ children, style }) { return <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", color: "var(--muted)", marginBottom: 6, ...style }}>{children}</div>; }
 function TextInput({ value, onChange, placeholder, type = "text" }) { return <input value={value} type={type} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} style={{ width: "100%", padding: "12px 14px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, color: "var(--text)", fontSize: 15, outline: "none" }} />; }
 function IconBtn({ children, onClick, disabled }) { return <button className="btn" disabled={disabled} onClick={onClick} style={{ background: disabled ? "transparent" : "var(--bg2)", border: "1px solid var(--line)", padding: 3, borderRadius: 7, opacity: disabled ? .35 : 1, lineHeight: 0, display: "flex", color: disabled ? "#3a425c" : "var(--text)" }}>{children}</button>; }
-function Note({ children, bad }) { return <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, fontSize: 13, fontWeight: 600, background: bad ? "rgba(255,61,119,.12)" : "rgba(46,230,166,.12)", color: bad ? "var(--mag)" : "var(--green)", border: `1px solid ${bad ? "rgba(255,61,119,.3)" : "rgba(46,230,166,.3)"}` }}>{children}</div>; }
+function Note({ children, bad }) { return <div style={{ marginTop: 12, padding: "10px 12px", borderRadius: 10, fontSize: 13, fontWeight: 600, background: bad ? "rgba(230,57,70,.12)" : "rgba(46,230,166,.12)", color: bad ? "var(--red)" : "var(--green)", border: `1px solid ${bad ? "rgba(230,57,70,.3)" : "rgba(46,230,166,.3)"}` }}>{children}</div>; }
 function Banner({ children, icon: Icon }) { return <div style={{ display: "flex", gap: 10, alignItems: "flex-start", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 16, fontSize: 14, color: "var(--muted)" }}><Icon size={17} style={{ color: "var(--gold)", marginTop: 1, flexShrink: 0 }} /><span>{children}</span></div>; }
 function Empty({ icon: Icon, title, sub }) { return <Centered><Icon size={34} style={{ color: "var(--muted)" }} /><div style={{ fontWeight: 800, fontSize: 18, marginTop: 12 }}>{title}</div><div style={{ color: "var(--muted)", marginTop: 4, maxWidth: 300 }}>{sub}</div></Centered>; }

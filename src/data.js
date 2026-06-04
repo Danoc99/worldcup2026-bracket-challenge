@@ -40,7 +40,7 @@ export const SCORE_MATRIX = [
 export const GROUP_TOTAL_MAX = 720;
 
 export const POS_META = [
-  { label: "1st", color: "#ffd24a" },
+  { label: "1st", color: "#f5c542" },
   { label: "2nd", color: "#cfd8e6" },
   { label: "3rd", color: "#e0915a" },
   { label: "4th", color: "#5e6b85" },

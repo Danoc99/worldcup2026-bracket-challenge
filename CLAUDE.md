@@ -82,6 +82,12 @@ will be added after the Round of 32 is set on June 28.
    - Add pool selection in the UI and a `poolId` to the relevant API calls.
    - Plan a migration for the existing single-pool `config`/entries (or start fresh
      after deleting test data). Propose the plan and wait for approval before coding.
+5. **Drag-and-drop reordering for group picks.** Frontend only (`src/App.jsx` —
+   `GroupCard`). Replace the up/down arrow buttons with drag-and-drop reordering of
+   the 4 teams within each group. Must stay lock-aware (no drag after `LOCK_ISO`)
+   and keep keyboard accessibility — either retain the arrows as a fallback or use a
+   library that gives keyboard reordering for free. Admin modal's reorder UI can
+   stay arrow-based for now.
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
