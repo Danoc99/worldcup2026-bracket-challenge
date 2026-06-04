@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronUp, ChevronDown, Trophy, Lock, Unlock, Crown, Settings,
-  Save, Check, RefreshCw, Medal, Users, ListOrdered, X, EyeOff, Wifi,
+  Save, Check, RefreshCw, Medal, Users, ListOrdered, X, EyeOff, Wifi, Trash2,
 } from "lucide-react";
 import {
   LOCK_ISO, GROUPS, GROUP_IDS, FLAG, SCORE_MATRIX, GROUP_TOTAL_MAX, POS_META,
@@ -43,7 +43,7 @@ export default function App() {
       <Tabs tab={tab} setTab={setTab} count={entries.length} />
       {tab === "picks" && <PicksTab me={me} saveMe={saveMe} entries={entries} locked={locked} reload={load} />}
       {tab === "standings" && <StandingsTab entries={entries} groups={groups} meta={meta} locked={locked} me={me} />}
-      <AdminFooter groups={groups} reload={load} />
+      <AdminFooter groups={groups} entries={entries} reload={load} />
       <FontAndTheme />
     </Shell>
   );
@@ -333,7 +333,7 @@ function PlayerBreakdown({ entry, groups, locked, isMe }) {
 }
 
 /* --------------------------------- admin --------------------------------- */
-function AdminFooter({ groups, reload }) {
+function AdminFooter({ groups, entries, reload }) {
   const [show, setShow] = useState(false);
   return (
     <>
@@ -341,19 +341,27 @@ function AdminFooter({ groups, reload }) {
         <button className="btn" onClick={() => setShow(true)} style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--muted)", padding: "8px 14px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 7 }}><Settings size={14} /> Admin · override results</button>
         <div style={{ color: "#46506b", fontSize: 11, marginTop: 14 }}>World Cup 2026 · live scores auto-update · knockout bracket unlocks after the group stage</div>
       </div>
-      {show && <AdminModal groups={groups} reload={reload} onClose={() => setShow(false)} />}
+      {show && <AdminModal groups={groups} entries={entries} reload={reload} onClose={() => setShow(false)} />}
     </>
   );
 }
 
-function AdminModal({ groups, reload, onClose }) {
+function AdminModal({ groups, entries, reload, onClose }) {
   const [pw, setPw] = useState(""); const [authed, setAuthed] = useState(false); const [err, setErr] = useState(null);
   const [draft, setDraft] = useState(() => { const d = {}; GROUP_IDS.forEach((g) => (d[g] = groups[g]?.order ? [...groups[g].order] : [...GROUPS[g]])); return d; });
   // mode per group: "auto" (follow API), "live" (manual), "final" (manual)
   const [mode, setMode] = useState(() => { const m = {}; GROUP_IDS.forEach((g) => (m[g] = groups[g]?.source === "admin" ? groups[g].status : "auto")); return m; });
   const [msg, setMsg] = useState(null); const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   async function login() { setErr(null); try { await api.adminVerify(pw.trim()); setAuthed(true); } catch (e) { setErr(e.message); } }
+  async function deleteEntry(name) {
+    if (!window.confirm(`Delete bracket for "${name}"? This cannot be undone.`)) return;
+    setDeleting(name); setMsg(null);
+    try { await api.adminDeleteEntry(pw.trim(), name); setMsg(`Deleted "${name}".`); reload(); }
+    catch (e) { setMsg("ERR: " + e.message); }
+    setDeleting(null);
+  }
   function move(g, i, dir) { setDraft((p) => { const a = [...p[g]]; const j = i + dir; if (j < 0 || j > 3) return p; [a[i], a[j]] = [a[j], a[i]]; return { ...p, [g]: a }; }); }
   async function save() {
     setBusy(true); setMsg(null);
@@ -381,6 +389,21 @@ function AdminModal({ groups, reload, onClose }) {
           </div>
         ) : (
           <div>
+            <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+              <div style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)", marginBottom: 8 }}>ENTRIES</div>
+              {(!entries || entries.length === 0) ? (
+                <div style={{ color: "var(--muted)", fontSize: 13 }}>No entries yet.</div>
+              ) : (
+                entries.map((e) => (
+                  <div key={e.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: "1px solid var(--line)" }}>
+                    <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{e.name}</span>
+                    <button className="btn" disabled={deleting === e.name} onClick={() => deleteEntry(e.name)} style={{ background: "transparent", border: "1px solid rgba(255,61,119,.35)", color: "var(--mag)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5, opacity: deleting === e.name ? .5 : 1 }}>
+                      {deleting === e.name ? <RefreshCw size={12} className="spin" /> : <Trash2 size={12} />} Delete
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
             <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>
               Standings update from the live feed on their own — you usually don't need to touch this. Use it only to <b style={{ color: "var(--muted)" }}>override</b> a group: <b style={{ color: "var(--text)" }}>Auto</b> follows the feed, <b style={{ color: "var(--mag)" }}>Live</b>/<b style={{ color: "var(--green)" }}>Final</b> force your own order (handy for fixing an official tiebreaker the feed gets wrong).
             </p>
