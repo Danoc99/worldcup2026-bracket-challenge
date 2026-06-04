@@ -27,7 +27,7 @@ export async function onRequestPost({ request, env }) {
   if (existing && existing.pin !== pin) return json({ error: "Name taken — wrong PIN." }, 403);
 
   const locked = Date.now() >= new Date(LOCK_ISO).getTime();
-  if (locked && existing) return json({ error: "Picks are locked." }, 423);
+  if (locked) return json({ error: "Picks are locked." }, 423);
 
   await POOL.put(key, JSON.stringify({ name, pin, predictions, updatedAt: Date.now() }));
   return json({ ok: true });

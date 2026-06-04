@@ -2,6 +2,8 @@ import fs from "fs";
 import assert from "assert";
 import { ordersFromStandings } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
+import { onRequestPost as submitEntry } from "../functions/api/entry.js";
+import { LOCK_ISO } from "../functions/_lib/util.js";
 
 // Our canonical groups (must match the front end)
 const GROUPS = {
@@ -64,6 +66,53 @@ ok("4th-place row is all zeros", M[3].every((v) => v === 0));
 // Scrambled top three, correct 4th -> scores only the top-three partial credit, nothing for the 4th.
 ok("scrambled top 3 + correct 4th = 25",
    scoreGroup(["United States","Australia","Türkiye","Paraguay"], actual) === 25);
+
+// 6) entry.js — lock behavior. After LOCK_ISO, reject BOTH new entries and edits.
+const LOCK_MS = new Date(LOCK_ISO).getTime();
+const validPreds = Object.fromEntries(Object.entries(GROUPS).map(([L, arr]) => [L, [...arr]]));
+
+async function postEntry({ body, kvData = {}, now }) {
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    const POOL = {
+      get: async (k) => kvData[k] ?? null,
+      put: async (k, v) => { kvData[k] = JSON.parse(v); },
+    };
+    const req = new Request("http://x/api/entry", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const res = await submitEntry({ request: req, env: { POOL } });
+    return { status: res.status, payload: await res.json(), kvData };
+  } finally {
+    Date.now = realNow;
+  }
+}
+
+const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
+
+// before lock: new entry accepted (sanity)
+{
+  const r = await postEntry({ body: baseBody, now: LOCK_MS - 1000 });
+  ok("before lock: new entry accepted (200)", r.status === 200 && r.payload.ok === true);
+  ok("before lock: entry written to KV", !!r.kvData["entry:daniel"]);
+}
+
+// after lock: new entry rejected (the fix for task 2)
+{
+  const r = await postEntry({ body: baseBody, now: LOCK_MS + 1000 });
+  ok("after lock: new entry rejected (423)", r.status === 423);
+  ok("after lock: no KV write for new entry", !r.kvData["entry:daniel"]);
+}
+
+// after lock: edits to existing entries still rejected (regression guard)
+{
+  const kvData = { "entry:daniel": { name: "Daniel", pin: "1234", predictions: validPreds, updatedAt: 0 } };
+  const r = await postEntry({ body: baseBody, kvData, now: LOCK_MS + 1000 });
+  ok("after lock: edit rejected (423)", r.status === 423);
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
