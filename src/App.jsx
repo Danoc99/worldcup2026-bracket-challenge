@@ -2,7 +2,15 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronUp, ChevronDown, Trophy, Lock, Unlock, Crown, Settings,
   Save, Check, RefreshCw, Medal, Users, ListOrdered, X, EyeOff, Wifi, Trash2,
+  GripVertical,
 } from "lucide-react";
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   LOCK_ISO, GROUPS, GROUP_IDS, FLAG, SCORE_MATRIX, GROUP_TOTAL_MAX, POS_META,
   scoreGroup, slug, clone,
@@ -164,9 +172,9 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
     if (existing) { /* server will verify pin on save */ }
     saveMe({ name: name.trim(), pin: pin.trim() }); setStatus(null);
   }
-  function move(g, idx, dir) {
+  function reorder(g, newOrder) {
     if (locked) return;
-    setPreds((prev) => { const arr = [...prev[g]]; const j = idx + dir; if (j < 0 || j > 3) return prev; [arr[idx], arr[j]] = [arr[j], arr[idx]]; return { ...prev, [g]: arr }; });
+    setPreds((prev) => ({ ...prev, [g]: newOrder }));
   }
   async function save() {
     setBusy(true); setStatus(null);
@@ -202,9 +210,9 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
       </div>
       {locked
         ? <Banner icon={Lock}>Picks are locked — this is your final bracket.</Banner>
-        : <Banner icon={ListOrdered}>Reorder each group 1→4 with the arrows, then save. Editable until June 11 kickoff.</Banner>}
+        : <Banner icon={ListOrdered}>Drag teams to reorder each group 1→4, then save. Editable until June 11 kickoff.</Banner>}
       {GROUP_IDS.map((g, gi) => (
-        <div key={g} className="rise" style={{ animationDelay: `${gi * 25}ms` }}><GroupCard g={g} order={preds[g]} onMove={move} locked={locked} /></div>
+        <div key={g} className="rise" style={{ animationDelay: `${gi * 25}ms` }}><GroupCard g={g} order={preds[g]} onReorder={reorder} locked={locked} /></div>
       ))}
       {status && <Note bad={status.bad}>{status.msg}</Note>}
       {!locked && (
@@ -217,28 +225,66 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
   );
 }
 
-function GroupCard({ g, order, onMove, locked }) {
+function GroupCard({ g, order, onReorder, locked }) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+  function handleDragEnd({ active, over }) {
+    if (!over || active.id === over.id) return;
+    const oldIndex = order.indexOf(active.id);
+    const newIndex = order.indexOf(over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onReorder(g, arrayMove(order, oldIndex, newIndex));
+  }
   return (
     <Card style={{ padding: 0, overflow: "hidden", marginBottom: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--line)", background: "var(--card2)" }}>
         <div style={{ fontFamily: "var(--display)", fontSize: 22, color: "var(--gold)", lineHeight: 1 }}>GROUP {g}</div>
       </div>
-      <div>
-        {order.map((team, idx) => (
-          <div key={team} className="grouprow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: idx < 3 ? "1px solid var(--line)" : "none" }}>
-            <PosBadge idx={idx} />
-            <span style={{ fontSize: 20 }}>{FLAG[team] || "🏳️"}</span>
-            <span style={{ fontWeight: 600, flex: 1, opacity: idx === 3 ? .6 : 1 }}>{team}</span>
-            {!locked && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <IconBtn disabled={idx === 0} onClick={() => onMove(g, idx, -1)}><ChevronUp size={16} /></IconBtn>
-                <IconBtn disabled={idx === 3} onClick={() => onMove(g, idx, 1)}><ChevronDown size={16} /></IconBtn>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      {locked ? (
+        <div>
+          {order.map((team, idx) => <StaticRow key={team} team={team} idx={idx} last={idx === 3} />)}
+        </div>
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={order} strategy={verticalListSortingStrategy}>
+            <div>
+              {order.map((team, idx) => <SortableRow key={team} team={team} idx={idx} last={idx === 3} />)}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
     </Card>
+  );
+}
+function StaticRow({ team, idx, last }) {
+  return (
+    <div className="grouprow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: last ? "none" : "1px solid var(--line)" }}>
+      <PosBadge idx={idx} />
+      <span style={{ fontSize: 20 }}>{FLAG[team] || "🏳️"}</span>
+      <span style={{ fontWeight: 600, flex: 1, opacity: idx === 3 ? .6 : 1 }}>{team}</span>
+    </div>
+  );
+}
+function SortableRow({ team, idx, last }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: team });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? .6 : 1,
+    display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+    borderBottom: last ? "none" : "1px solid var(--line)",
+    background: isDragging ? "var(--card2)" : undefined,
+    cursor: "grab", touchAction: "none",
+  };
+  return (
+    <div ref={setNodeRef} className="grouprow" style={style} {...attributes} {...listeners}>
+      <PosBadge idx={idx} />
+      <span style={{ fontSize: 20 }}>{FLAG[team] || "🏳️"}</span>
+      <span style={{ fontWeight: 600, flex: 1, opacity: idx === 3 ? .6 : 1 }}>{team}</span>
+      <GripVertical size={16} style={{ color: "var(--muted)" }} />
+    </div>
   );
 }
 function PosBadge({ idx, small }) {
