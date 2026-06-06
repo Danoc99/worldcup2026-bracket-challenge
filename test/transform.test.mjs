@@ -1,6 +1,6 @@
 import fs from "fs";
 import assert from "assert";
-import { ordersFromStandings } from "../functions/_lib/transform.js";
+import { ordersFromStandings, ordersFromMatches } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { LOCK_ISO } from "../functions/_lib/util.js";
@@ -50,6 +50,57 @@ for (const L of Object.keys(GROUPS)) {
 // 4) Status detection: A finished (3 games), others live (2 games)
 ok("group A detected final", groups.A?.status === "final");
 ok("group B detected live", groups.B?.status === "live");
+
+// 4b) Pending detection — pre-kickoff feeds report 0 playedGames for every team.
+//     ordersFromStandings should mark the group "pending" so the UI hides the
+//     seed/draw order instead of projecting nonsense points from it.
+{
+  const pendingFeed = {
+    standings: [{
+      group: "GROUP_A", type: "TOTAL",
+      table: [
+        { position: 1, team: { name: "Mexico", tla: "MEX" }, playedGames: 0 },
+        { position: 2, team: { name: "South Korea", tla: "KOR" }, playedGames: 0 },
+        { position: 3, team: { name: "South Africa", tla: "RSA" }, playedGames: 0 },
+        { position: 4, team: { name: "Czechia", tla: "CZE" }, playedGames: 0 },
+      ],
+    }],
+  };
+  const { groups: g } = ordersFromStandings(pendingFeed);
+  ok("ordersFromStandings: 0/0/0/0 played → pending", g.A?.status === "pending");
+  ok("ordersFromStandings: pending still emits 4-team order", g.A?.order?.length === 4);
+}
+
+// Regression guard: if even one team has played, the group is live (not pending).
+{
+  const liveFeed = {
+    standings: [{
+      group: "GROUP_A", type: "TOTAL",
+      table: [
+        { position: 1, team: { name: "Mexico", tla: "MEX" }, playedGames: 1 },
+        { position: 2, team: { name: "South Korea", tla: "KOR" }, playedGames: 0 },
+        { position: 3, team: { name: "South Africa", tla: "RSA" }, playedGames: 1 },
+        { position: 4, team: { name: "Czechia", tla: "CZE" }, playedGames: 0 },
+      ],
+    }],
+  };
+  const { groups: g } = ordersFromStandings(liveFeed);
+  ok("ordersFromStandings: any team played → live", g.A?.status === "live");
+}
+
+// Fallback path (ordersFromMatches) should also flag all-scheduled groups pending.
+{
+  const scheduledMatches = {
+    matches: [
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "SCHEDULED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "South Korea", tla: "KOR" } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "SCHEDULED",
+        homeTeam: { name: "South Africa", tla: "RSA" }, awayTeam: { name: "Czechia", tla: "CZE" } },
+    ],
+  };
+  const { groups: g } = ordersFromMatches(scheduledMatches);
+  ok("ordersFromMatches: all SCHEDULED → pending", g.A?.status === "pending");
+}
 
 // 5) Scoring matrix sanity (mirrors front end)
 const M = [[25,15,5,0],[15,20,5,0],[5,5,15,0],[0,0,0,0]];
