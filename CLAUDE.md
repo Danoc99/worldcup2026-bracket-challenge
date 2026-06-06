@@ -72,14 +72,10 @@ will be added after the Round of 32 is set on June 28.
 - **2026-06-04 — World Cup color scheme (Pitch & Trophy)** ([PR #3](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/3), merge `fcb3ffa`). Replaced the pink/gold palette with a football-themed green/gold scheme. Dropped `--mag`; added `--pitch` (brand) and `--red` (live/alert/delete). Re-tinted bg/card/line/text/muted toward dark pitch. Frontend only.
 - **2026-06-04 — Admin: delete a bracket** ([PR #1](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/1), merge `2b3df6e`). New `deleteEntry` action on `POST /api/admin` (admin-pass-checked, slugs the name, KV-deletes `entry:<slug>`) plus an ENTRIES card at the top of the admin modal with per-row Delete.
 
-## Task backlog (do these as separate branches, in this order)
-4. **Multiple pools (e.g. "Friends" and "Family").** The only architectural change.
-   - Namespace per-pool keys: `pool:<poolId>:config`, `pool:<poolId>:entry:<slug>`.
-   - **Keep standings GLOBAL:** `cache:standings` and `manualResults` stay shared
-     across all pools (one real tournament — see invariants above).
-   - Add pool selection in the UI and a `poolId` to the relevant API calls.
-   - Plan a migration for the existing single-pool `config`/entries (or start fresh
-     after deleting test data). Propose the plan and wait for approval before coding.
+## Status
+Group-stage MVP is feature-complete. No outstanding tasks. (Phase 2 — knockout
+bracket — remains the next planned milestone once the Round of 32 is set on
+June 28; see "What this is" at the top.)
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
