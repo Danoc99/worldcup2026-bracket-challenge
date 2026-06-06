@@ -72,10 +72,38 @@ will be added after the Round of 32 is set on June 28.
 - **2026-06-04 — World Cup color scheme (Pitch & Trophy)** ([PR #3](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/3), merge `fcb3ffa`). Replaced the pink/gold palette with a football-themed green/gold scheme. Dropped `--mag`; added `--pitch` (brand) and `--red` (live/alert/delete). Re-tinted bg/card/line/text/muted toward dark pitch. Frontend only.
 - **2026-06-04 — Admin: delete a bracket** ([PR #1](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/1), merge `2b3df6e`). New `deleteEntry` action on `POST /api/admin` (admin-pass-checked, slugs the name, KV-deletes `entry:<slug>`) plus an ENTRIES card at the top of the admin modal with per-row Delete.
 
-## Status
-Group-stage MVP is feature-complete. No outstanding tasks. (Phase 2 — knockout
-bracket — remains the next planned milestone once the Round of 32 is set on
-June 28; see "What this is" at the top.)
+## Backlog
+
+Ordered easiest → hardest. Pick one and propose a plan before coding.
+
+1. **Tiebreaker rule (placeholder).** Add a stub to the scoring docs / Help modal
+   noting that a tiebreaker exists, with the actual rule TBD. No code yet — just a
+   decision-pending placeholder so it's visible we owe a rule before final standings
+   matter.
+
+2. **Pre-tournament placeholder for standings.** Pre-kickoff, the Standings tab shows
+   "projected" points derived from the football-data feed's draw/seed order, which is
+   meaningless until games start. Detect "no games played yet" per group and render
+   "—" instead of a projection, plus a banner: "Tournament hasn't started yet —
+   projections start once games kick off." Frontend-only, ~30 lines. Likely touches
+   `src/App.jsx` (Standings tab) and a helper in `src/data.js` or in
+   `functions/_lib/transform.js`'s consumer; do not change KV shape.
+
+3. **Contrarian / consensus view.** Post-lock, surface how each player's picks compare
+   to the pool. Two variants — implement either or both:
+   - **Contrarian badge on Picks tab:** "You're 1 of 2 picking Morocco to win Group C."
+   - **Consensus row on Standings tab (per group):** "8/12 picked Brazil 1st."
+   Pure read-only from existing entries. New component(s); no backend or KV change.
+   Medium effort.
+
+4. **Phase 2 — Knockout bracket.** When FIFA releases the Round of 32 bracket on
+   2026-06-27, open a 1-day window for players to fill out a knockout bracket
+   (R32 → Final). Scoring is March-Madness-style: deeper rounds are worth more (e.g.
+   R32 +25, R16 +50, QF +100, SF +200, Final +300 — exact matrix TBD). Knockout
+   points add to the group-stage total. Large change: new lock window (separate from
+   `LOCK_ISO`), new KV shape for knockout picks, new scoring matrix in `src/data.js`,
+   new UI tab/flow, and new admin overrides for match results. Needs an explicit plan
+   before any code lands; KV-shape changes follow the working agreement above.
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
