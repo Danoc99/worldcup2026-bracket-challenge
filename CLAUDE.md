@@ -77,9 +77,11 @@ will be added after the Round of 32 is set on June 28.
 Ordered easiest → hardest. Pick one and propose a plan before coding.
 
 1. **Tiebreaker rule (placeholder).** Add a stub to the scoring docs / Help modal
-   noting that a tiebreaker exists, with the actual rule TBD. No code yet — just a
-   decision-pending placeholder so it's visible we owe a rule before final standings
-   matter.
+   noting that a tiebreaker exists. **Leading candidate (still TBD):** when total
+   points tie, break by most correct knockout picks weighted by round depth
+   (R32 < R16 < QF < SF < Final). Rationale: scoring already rewards bracket depth
+   because deep matches are closer to 50/50 — the tiebreaker should reward the same
+   skill, not flat accuracy across easier group picks. No code yet.
 
 2. **Pre-tournament placeholder for standings.** Pre-kickoff, the Standings tab shows
    "projected" points derived from the football-data feed's draw/seed order, which is
