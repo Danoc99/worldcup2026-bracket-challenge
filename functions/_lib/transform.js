@@ -1,5 +1,6 @@
 // Turns football-data.org responses into { groups: { A:{order,status}, ... }, unmapped:[] }
-// status: "live" (group still in progress) or "final" (all 4 teams played 3 games).
+// status: "pending" (no games played yet — feed order is just seed/draw),
+//         "live" (group in progress), or "final" (all 4 teams played 3 games).
 // Primary path uses the /standings response (official ordering incl. tiebreakers).
 // Fallback computes provisional tables from finished matches (points, GD, GF),
 // so we still get something even if /standings is unavailable for the comp type.
@@ -17,14 +18,20 @@ export function ordersFromStandings(json) {
     const rows = [...(s.table || [])].sort((a, b) => (a.position || 0) - (b.position || 0));
     const order = [];
     let allPlayed = true;
+    let anyPlayed = false;
     for (const r of rows) {
       const team = r.team || {};
       const our = mapTeam(team.name, team.tla);
       if (our) order.push(our);
       else unmapped.push(team.name || team.tla || "(unknown)");
-      if ((r.playedGames ?? 0) < 3) allPlayed = false;
+      const played = r.playedGames ?? 0;
+      if (played < 3) allPlayed = false;
+      if (played > 0) anyPlayed = true;
     }
-    if (order.length === 4) groups[letter] = { order, status: allPlayed ? "final" : "live", source: "api" };
+    if (order.length === 4) {
+      const status = allPlayed ? "final" : anyPlayed ? "live" : "pending";
+      groups[letter] = { order, status, source: "api" };
+    }
   }
   return { groups, unmapped };
 }
@@ -63,7 +70,9 @@ export function ordersFromMatches(json) {
     );
     if (rows.length === 4) {
       const allPlayed = rows.every((r) => r.played >= 3);
-      groups[letter] = { order: rows.map((r) => r.team), status: allPlayed ? "final" : "live", source: "api" };
+      const anyPlayed = rows.some((r) => r.played > 0);
+      const status = allPlayed ? "final" : anyPlayed ? "live" : "pending";
+      groups[letter] = { order: rows.map((r) => r.team), status, source: "api" };
     }
   }
   return { groups, unmapped };

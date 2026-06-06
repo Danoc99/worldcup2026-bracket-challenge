@@ -383,12 +383,17 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
   const counted = GROUP_IDS.map((g) => groups[g]).filter(Boolean);
   const liveCount = counted.filter((r) => r.status === "live").length;
   const finalCount = counted.filter((r) => r.status === "final").length;
+  const pendingCount = counted.filter((r) => r.status === "pending").length;
   const anyLive = liveCount > 0;
-  const anyResults = counted.length > 0;
+  const anyResults = liveCount + finalCount > 0;
+  const allPending = pendingCount > 0 && !anyResults;
 
   const rows = useMemo(() => entries.map((e) => {
     let total = 0;
-    GROUP_IDS.forEach((g) => { const r = groups[g]; if (r) total += scoreGroup(e.predictions?.[g], r.order); });
+    GROUP_IDS.forEach((g) => {
+      const r = groups[g];
+      if (r && r.status !== "pending") total += scoreGroup(e.predictions?.[g], r.order);
+    });
     return { ...e, total };
   }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)), [entries, groups]);
 
@@ -399,10 +404,11 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, fontSize: 13, color: "var(--muted)", flexWrap: "wrap" }}>
         {anyLive && <span className="pulse" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--red)", fontWeight: 800, letterSpacing: 1 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: "var(--red)" }} />LIVE</span>}
         {anyResults
-          ? <span>{finalCount} final · {liveCount} projected · {12 - counted.length} to come</span>
+          ? <span>{finalCount} final · {liveCount} projected{pendingCount ? ` · ${pendingCount} pending` : ""} · {12 - counted.length} to come</span>
           : <span>{locked ? "Tournament underway — standings update automatically." : "Standings light up once games start."}</span>}
         {meta?.stale && <span style={{ color: "#caa14a", display: "inline-flex", alignItems: "center", gap: 5 }}><Wifi size={13} /> showing last synced data</span>}
       </div>
+      {allPending && <Banner icon={Trophy}>Tournament hasn't started yet — projections will start once games kick off on June 11.</Banner>}
       {anyLive && <Banner icon={RefreshCw}>Projected points assume each live group finishes in its current order — they shuffle as results change and lock when a group goes final.</Banner>}
       {rows.map((r, i) => {
         const isMe = slug(r.name) === slug(me?.name || ""); const medal = i < 3 && anyResults;
@@ -437,13 +443,13 @@ function PlayerBreakdown({ entry, groups, locked, isMe }) {
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 8 }}>
       {GROUP_IDS.map((g) => {
         const pred = entry.predictions?.[g] || []; const r = groups[g];
-        const isLive = r?.status === "live"; const isFinal = r?.status === "final";
-        const pts = r ? scoreGroup(pred, r.order) : null;
+        const isLive = r?.status === "live"; const isFinal = r?.status === "final"; const isPending = r?.status === "pending";
+        const pts = r && !isPending ? scoreGroup(pred, r.order) : null;
         return (
           <div key={g} style={{ background: "var(--bg2)", border: `1px solid ${isLive ? "rgba(230,57,70,.35)" : "var(--line)"}`, borderRadius: 10, padding: "8px 10px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <span style={{ fontFamily: "var(--display)", fontSize: 14, color: "var(--gold)" }}>GRP {g}</span>
-              {r ? <span style={{ fontWeight: 800, fontSize: 13, color: isLive ? "var(--red)" : "var(--green)" }}>{isLive ? "~" : "+"}{pts}</span> : <span style={{ fontSize: 10, color: "#46506b" }}>—</span>}
+              {pts !== null ? <span style={{ fontWeight: 800, fontSize: 13, color: isLive ? "var(--red)" : "var(--green)" }}>{isLive ? "~" : "+"}{pts}</span> : <span style={{ fontSize: 10, color: "#46506b" }}>—</span>}
             </div>
             {pred.map((t, i) => {
               const correct = isFinal && r.order[i] === t; const liveMatch = isLive && r.order[i] === t;
@@ -456,6 +462,7 @@ function PlayerBreakdown({ entry, groups, locked, isMe }) {
               );
             })}
             {isLive && <div style={{ marginTop: 4, fontSize: 9, letterSpacing: 1, fontWeight: 800, color: "var(--red)" }}>PROJECTED</div>}
+            {isPending && <div style={{ marginTop: 4, fontSize: 9, letterSpacing: 1, fontWeight: 800, color: "var(--muted)" }}>PENDING</div>}
           </div>
         );
       })}
