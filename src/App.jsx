@@ -183,6 +183,12 @@ function HelpModal({ onClose }) {
           </div>
         </div>
 
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Tiebreaker <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 700, letterSpacing: 1, marginLeft: 6 }}>· TBD</span></div>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 6px", lineHeight: 1.5 }}>If two players finish tied on total points, we'll break the tie — the exact rule is still being finalized.</p>
+          <p style={{ color: "var(--muted)", fontSize: 13, margin: 0, lineHeight: 1.5 }}><b style={{ color: "var(--text)" }}>Leading candidate:</b> most correct knockout picks, weighted by round (R32 &lt; R16 &lt; QF &lt; SF &lt; Final). Group picks are easier to get right, so the tiebreaker should reward the hardest calls.</p>
+        </div>
+
         <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px" }}>
           <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>TL;DR</div>
           <p style={{ color: "var(--muted)", fontSize: 13, margin: 0, lineHeight: 1.5 }}>Red and green = slot-perfect hits. White can still score partial credit. 4th never scores. Projected can change; Final is locked in.</p>

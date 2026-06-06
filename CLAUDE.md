@@ -66,6 +66,8 @@ will be added after the Round of 32 is set on June 28.
 - `npx wrangler pages dev dist --kv POOL`  → full app + Functions locally
 
 ## Recently shipped
+- **2026-06-06 — Tiebreaker placeholder in Help modal** ([PR #12](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/12), merge `TBD`). Backlog task 1 (was). New "Tiebreaker · TBD" card in `HelpModal` between the color-meanings section and the TL;DR. Notes that ties on total points will be broken; names the leading candidate (most correct knockout picks weighted by round depth — R32 < R16 < QF < SF < Final). No scoring-logic changes; placeholder only.
+- **2026-06-06 — Hide standings projections until games kick off** ([PR #11](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/11), merge `2640c2e`). Backlog task 2 (was). New `"pending"` status in `functions/_lib/transform.js` (both `ordersFromStandings` and `ordersFromMatches`): a group is pending iff every team has played 0 games, live as soon as one has. `App.jsx` skips pending groups in totals, adds a `Trophy`-iconed banner ("Tournament hasn't started yet — projections start once games kick off on June 11") when every group is pending, and renders `—` + a muted `PENDING` tag per group instead of red `~`/`PROJECTED`. Pure additive — no KV / API contract / admin-modal change. 4 new tests in `test/transform.test.mjs`.
 - **2026-06-04 — "How it works" help modal** ([PR #6](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/6), merge `015fcd6`). New `HelpPill` next to the lock countdown in the header opens a `HelpModal` explaining scoring, projected-vs-final points, and the red/green/white/dimmed colors on the Standings tab. Frontend only; not a numbered backlog task.
 - **2026-06-04 — Drag-and-drop reordering for group picks** ([PR #5](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/5), merge `8bc4ac0`). `GroupCard` now uses `@dnd-kit/sortable` instead of up/down arrow buttons. Drag with mouse/touch, or Tab+Space+Arrows+Space for keyboard. `PicksTab.move(g,idx,dir)` replaced with `reorder(g, newOrder)`. Locked state renders a static `StaticRow`; editable state uses `DndContext`+`SortableContext`+`SortableRow` with a `GripVertical` handle. Admin modal still uses arrows (out of scope).
 - **2026-06-04 — Lock blocks new entries after LOCK_ISO** ([PR #4](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/4), merge `9263cac`). `functions/api/entry.js` now rejects any POST after `LOCK_ISO` — new or edit — not just edits (dropped the `&& existing` guard). Added 5 tests in `test/transform.test.mjs` that mock `Date.now` and a fake `POOL` around `onRequestPost` to cover before-lock accept, after-lock new-entry reject, and after-lock edit reject (regression guard).
@@ -76,29 +78,14 @@ will be added after the Round of 32 is set on June 28.
 
 Ordered easiest → hardest. Pick one and propose a plan before coding.
 
-1. **Tiebreaker rule (placeholder).** Add a stub to the scoring docs / Help modal
-   noting that a tiebreaker exists. **Leading candidate (still TBD):** when total
-   points tie, break by most correct knockout picks weighted by round depth
-   (R32 < R16 < QF < SF < Final). Rationale: scoring already rewards bracket depth
-   because deep matches are closer to 50/50 — the tiebreaker should reward the same
-   skill, not flat accuracy across easier group picks. No code yet.
-
-2. **Pre-tournament placeholder for standings.** Pre-kickoff, the Standings tab shows
-   "projected" points derived from the football-data feed's draw/seed order, which is
-   meaningless until games start. Detect "no games played yet" per group and render
-   "—" instead of a projection, plus a banner: "Tournament hasn't started yet —
-   projections start once games kick off." Frontend-only, ~30 lines. Likely touches
-   `src/App.jsx` (Standings tab) and a helper in `src/data.js` or in
-   `functions/_lib/transform.js`'s consumer; do not change KV shape.
-
-3. **Contrarian / consensus view.** Post-lock, surface how each player's picks compare
+1. **Contrarian / consensus view.** Post-lock, surface how each player's picks compare
    to the pool. Two variants — implement either or both:
    - **Contrarian badge on Picks tab:** "You're 1 of 2 picking Morocco to win Group C."
    - **Consensus row on Standings tab (per group):** "8/12 picked Brazil 1st."
    Pure read-only from existing entries. New component(s); no backend or KV change.
    Medium effort.
 
-4. **Phase 2 — Knockout bracket.** When FIFA releases the Round of 32 bracket on
+2. **Phase 2 — Knockout bracket.** When FIFA releases the Round of 32 bracket on
    2026-06-27, open a 1-day window for players to fill out a knockout bracket
    (R32 → Final). Scoring is March-Madness-style: deeper rounds are worth more (e.g.
    R32 +25, R16 +50, QF +100, SF +200, Final +300 — exact matrix TBD). Knockout
@@ -106,6 +93,9 @@ Ordered easiest → hardest. Pick one and propose a plan before coding.
    `LOCK_ISO`), new KV shape for knockout picks, new scoring matrix in `src/data.js`,
    new UI tab/flow, and new admin overrides for match results. Needs an explicit plan
    before any code lands; KV-shape changes follow the working agreement above.
+
+   - Tiebreaker rule (placeholder shipped — see Recently shipped). Actual scoring rule
+     will land alongside knockout scoring once the matrix is finalized.
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
