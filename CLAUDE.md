@@ -81,15 +81,11 @@ Ordered easiest → hardest. Pick one and propose a plan before coding.
 
 1. **Phase 2 — Knockout bracket.** When FIFA releases the Round of 32 bracket on
    2026-06-27, open a 1-day window for players to fill out a knockout bracket
-   (R32 → Final). Scoring is March-Madness-style: deeper rounds are worth more (e.g.
-   R32 +25, R16 +50, QF +100, SF +200, Final +300 — exact matrix TBD). Knockout
-   points add to the group-stage total. Large change: new lock window (separate from
-   `LOCK_ISO`), new KV shape for knockout picks, new scoring matrix in `src/data.js`,
-   new UI tab/flow, and new admin overrides for match results. Needs an explicit plan
-   before any code lands; KV-shape changes follow the working agreement above.
+   (R32 → Final). Full plan + decisions in [`docs/knockout-plan.md`](docs/knockout-plan.md) — read that before
+   implementing. Open questions in the doc must be answered first.
 
-   - Tiebreaker rule (placeholder shipped — see Recently shipped). Actual scoring rule
-     will land alongside knockout scoring once the matrix is finalized.
+   - Tiebreaker rule (placeholder shipped — see Recently shipped). Concrete rule
+     lands alongside knockout scoring per the plan doc.
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
