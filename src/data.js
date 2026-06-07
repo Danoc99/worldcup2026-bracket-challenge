@@ -55,6 +55,30 @@ export function scoreGroup(pred, actual) {
   }
   return pts;
 }
+
+// tallyPicks(entries) → { [groupId]: [{team→count}, {team→count}, {team→count}, {team→count}], total }
+// One bucket per slot (0=1st .. 3=4th) per group. `total` is the entry count used,
+// so the UI can render "X of N" without re-counting. Entries without predictions
+// for a given group don't contribute to that group's buckets.
+export function tallyPicks(entries) {
+  const out = { total: 0 };
+  const list = Array.isArray(entries) ? entries : [];
+  for (const g of GROUP_IDS) out[g] = [{}, {}, {}, {}];
+  for (const e of list) {
+    if (!e?.predictions) continue;
+    out.total++;
+    for (const g of GROUP_IDS) {
+      const pred = e.predictions[g];
+      if (!Array.isArray(pred)) continue;
+      for (let i = 0; i < 4; i++) {
+        const t = pred[i];
+        if (!t) continue;
+        out[g][i][t] = (out[g][i][t] || 0) + 1;
+      }
+    }
+  }
+  return out;
+}
 export function slug(s) {
   return String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
 }
