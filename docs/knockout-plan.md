@@ -16,27 +16,34 @@ Once approved, treat changes as new decisions, not refinements.
 
 ## Scoring
 
-Per-match values (locked in here — overrides the conflicting numbers in the older
-backlog text):
+Per-match values (locked in):
 
 | Round | Per-match | Matches | Round total |
 |-------|----------:|--------:|------------:|
-| R32   |  20 | 16 |   320 |
-| R16   |  40 |  8 |   320 |
-| QF    |  80 |  4 |   320 |
-| SF    | 160 |  2 |   320 |
-| Final | 320 |  1 |   320 |
-| **Total** | | **31** | **1,600** |
+| R32   |  40 | 16 |   640 |
+| R16   |  80 |  8 |   640 |
+| QF    | 160 |  4 |   640 |
+| SF    | 320 |  2 |   640 |
+| Final | 640 |  1 |   640 |
+| **Total** | | **31** | **3,200** |
 
-- These match the in-code mention in `App.jsx` `ScoringKey`, which already tells
-  players the knockout is worth "up to 1,600". Stick with this so we don't have to
-  change copy.
+- Clean doubling per round mirrors the "deeper rounds are skill, not luck" philosophy.
+- Weighted so the knockout dominates final standings (~82% of max combined points)
+  but a strong group performance still matters. R32 at 40 pts beats the easiest
+  group pick (25 pts for an exact 1st-place hit) — the harder decision pays more.
 - 3rd-place playoff: **not scored** (also not displayed — see open question 4).
-- Knockout points add to group-stage total. Max combined: 720 + 1,600 = **2,320**.
-- Tiebreaker: the existing placeholder in `HelpModal` says "most correct knockout
-  picks weighted by round depth (R32 < R16 < QF < SF < Final)". With per-round
-  values 20 < 40 < 80 < 160 < 320, summing raw points naturally weights deeper
+- Knockout points add to group-stage total. Max combined: 720 + 3,200 = **3,920**.
+- Tiebreaker: existing `HelpModal` placeholder says "most correct knockout picks
+  weighted by round depth (R32 < R16 < QF < SF < Final)". With per-round values
+  40 < 80 < 160 < 320 < 640, summing raw knockout points naturally weights deeper
   rounds. Concrete tiebreaker = compare knockout-only point totals.
+
+**Copy to update during implementation** (these currently advertise the old 1,600
+number from a stale earlier decision):
+- `App.jsx` `ScoringKey` paragraph — change "1,600 more (20/40/80/160/320 a round;
+  the champion pick alone is 320)" → "3,200 more (40/80/160/320/640 a round; the
+  champion pick alone is 640)".
+- `App.jsx` `HelpModal` "How points work" card — extend with the knockout matrix.
 
 ## KV shape
 
@@ -142,14 +149,12 @@ committing to a direction.
 
 ## Open questions — resolve before June 27
 
-1. **Scoring values:** confirm 20 / 40 / 80 / 160 / 320 per round (the in-code
-   number) over the older 25 / 50 / 100 / 200 / 300 in stale backlog text?
-2. **3rd-place playoff:** skip entirely from picks + display, right?
-3. **Lock window length:** ~24 hours from R32 reveal is tight (friends may be
+1. **3rd-place playoff:** skip entirely from picks + display, right?
+2. **Lock window length:** ~24 hours from R32 reveal is tight (friends may be
    asleep). Worth extending to 36 hours?
-4. **Mobile UX:** standard left-to-right bracket grid is rough on phones. Acceptable
+3. **Mobile UX:** standard left-to-right bracket grid is rough on phones. Acceptable
    for the friends-pool audience, or worth a vertical mobile layout?
-5. **Bracket structure source:** does football-data actually populate knockout
+4. **Bracket structure source:** does football-data actually populate knockout
    matchups in the feed immediately after the FIFA draw? Verify on June 27 via
    `/api/health` or a manual fetch before relying on it. If not, fallback plan:
    manually enter the 16 R32 matchups via a one-time admin form.
