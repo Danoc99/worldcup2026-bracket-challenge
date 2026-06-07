@@ -9,10 +9,11 @@ Once approved, treat changes as new decisions, not refinements.
 ## Timing
 
 - **R32 bracket reveal:** ~2026-06-27 by FIFA (exact time TBD).
-- **Knockout picks window:** opens at reveal, closes at first R32 kickoff (~2026-06-28
-  16:00 UTC, TBD — confirm against the actual schedule).
+- **Knockout picks window:** ~24 hours from reveal — set initially, user may extend
+  on the day if friends need more time.
 - **New constant:** `KNOCKOUT_LOCK_ISO` in `src/data.js` AND `functions/_lib/util.js`
-  (kept in sync, same as `LOCK_ISO`).
+  (kept in sync, same as `LOCK_ISO`). Easy to bump via a one-line edit + redeploy
+  if the window needs extending.
 
 ## Scoring
 
@@ -70,7 +71,8 @@ keys. `entry:<slug>` shape is unchanged.
 
 ## Match IDs / bracket structure
 
-32 R32 teams → 31 matches if we skip 3rd-place playoff (we are).
+32 R32 teams → 31 matches. **3rd-place playoff is skipped entirely**: not picked,
+not displayed, not scored. Treat it as if it doesn't exist in the bracket UI.
 
 Match ID scheme:
 - `R32_1` through `R32_16` — Round of 32
@@ -111,7 +113,8 @@ deriving is safer and matches the existing pattern for group results.
 - Bracket UI: 5 columns left-to-right (R32 / R16 / QF / SF / Final). Each match cell
   shows two team rows; click to pick the winner. Downstream matches show "winner of
   M_N" placeholder until the upstream pick is made. Locked state shows pick + ✓/✗
-  if the match is final.
+  if the match is final. On mobile the grid scrolls horizontally — acceptable per
+  user; no separate mobile layout planned.
 - Scoring breakdown: extend `PlayerBreakdown` on Standings with a knockout summary
   card below the per-group grid: per-round points + total.
 - `HelpModal`: extend the "How points work" section to include the knockout matrix.
@@ -147,17 +150,19 @@ Rough estimate: 4–6 focused hours if the plan holds. The risk is step 2 (the
 transform) and step 8 (the bracket UI). Both warrant a sanity check before
 committing to a direction.
 
-## Open questions — resolve before June 27
+## Day-of verification (2026-06-27)
 
-1. **3rd-place playoff:** skip entirely from picks + display, right?
-2. **Lock window length:** ~24 hours from R32 reveal is tight (friends may be
-   asleep). Worth extending to 36 hours?
-3. **Mobile UX:** standard left-to-right bracket grid is rough on phones. Acceptable
-   for the friends-pool audience, or worth a vertical mobile layout?
-4. **Bracket structure source:** does football-data actually populate knockout
-   matchups in the feed immediately after the FIFA draw? Verify on June 27 via
-   `/api/health` or a manual fetch before relying on it. If not, fallback plan:
-   manually enter the 16 R32 matchups via a one-time admin form.
+The only thing left that can't be pre-resolved: does football-data actually
+populate knockout matchups in the feed once FIFA finalizes the R32 draw?
+
+**Verification step:** before starting implementation, hit `/api/health` and
+manually fetch the matches endpoint. Look for `stage: "LAST_32"` or equivalent
+with populated team names (not just "TBD"/"Winner Group X" placeholders).
+
+**Fallback if the feed isn't ready:** add a one-time admin form to manually enter
+the 16 R32 matchups. Builds a hardcoded bracket structure for the rest of the
+implementation. Slower path but tractable in the same day. User has agreed this
+fallback is acceptable.
 
 ## Not in scope
 
