@@ -4,6 +4,7 @@ import { ordersFromStandings, ordersFromMatches } from "../functions/_lib/transf
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { LOCK_ISO } from "../functions/_lib/util.js";
+import { tallyPicks } from "../src/data.js";
 
 // Our canonical groups (must match the front end)
 const GROUPS = {
@@ -163,6 +164,39 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   const kvData = { "entry:daniel": { name: "Daniel", pin: "1234", predictions: validPreds, updatedAt: 0 } };
   const r = await postEntry({ body: baseBody, kvData, now: LOCK_MS + 1000 });
   ok("after lock: edit rejected (423)", r.status === 423);
+}
+
+// 7) tallyPicks — contrarian/consensus tallies feed the post-lock UI.
+//    Empty/missing inputs must not throw; counts must be slot-accurate per group.
+{
+  const t = tallyPicks([]);
+  ok("tallyPicks([]) total === 0", t.total === 0);
+  ok("tallyPicks([]) seeds all 12 groups", Object.keys(GROUPS).every((g) => Array.isArray(t[g]) && t[g].length === 4));
+  ok("tallyPicks([]) empty buckets", Object.keys(t.A[0]).length === 0);
+}
+{
+  const t = tallyPicks(null);
+  ok("tallyPicks(null) total === 0", t.total === 0);
+}
+{
+  // Three players, all picking Brazil 1st in C; two picking Morocco 2nd, one picking Scotland 2nd.
+  // Player without predictions for C still counts toward total but not toward C's buckets.
+  const e1 = { name: "a", predictions: { C: ["Brazil", "Morocco", "Scotland", "Haiti"] } };
+  const e2 = { name: "b", predictions: { C: ["Brazil", "Morocco", "Haiti", "Scotland"] } };
+  const e3 = { name: "c", predictions: { C: ["Brazil", "Scotland", "Morocco", "Haiti"] } };
+  const t = tallyPicks([e1, e2, e3]);
+  ok("tallyPicks total counts entries", t.total === 3);
+  ok("tallyPicks: 3/3 picked Brazil 1st in C", t.C[0]["Brazil"] === 3);
+  ok("tallyPicks: 2/3 picked Morocco 2nd in C", t.C[1]["Morocco"] === 2);
+  ok("tallyPicks: 1/3 picked Scotland 2nd in C", t.C[1]["Scotland"] === 1);
+  ok("tallyPicks: untouched group has empty buckets", Object.keys(t.A[0]).length === 0);
+}
+{
+  // Entry with no predictions object is excluded from total — the "X of N picked"
+  // denominator should be people who could have picked, not no-shows.
+  const t = tallyPicks([{ name: "x" }, { name: "y", predictions: { A: ["Mexico", "Czechia", "South Korea", "South Africa"] } }]);
+  ok("tallyPicks: missing-predictions entries excluded from total", t.total === 1);
+  ok("tallyPicks: entries with picks fill buckets", t.A[0]["Mexico"] === 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -13,7 +13,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   LOCK_ISO, GROUPS, GROUP_IDS, FLAG, SCORE_MATRIX, GROUP_TOTAL_MAX, POS_META,
-  scoreGroup, slug, clone,
+  scoreGroup, slug, clone, tallyPicks,
 } from "./data.js";
 import { api } from "./api.js";
 
@@ -250,6 +250,7 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
   const initFor = useRef(null);
 
   const myEntry = useMemo(() => entries.find((e) => slug(e.name) === slug(me?.name || "")), [entries, me]);
+  const tally = useMemo(() => tallyPicks(entries), [entries]);
   function freshPreds() { const p = {}; GROUP_IDS.forEach((g) => (p[g] = [...GROUPS[g]])); return p; }
 
   useEffect(() => {
@@ -303,7 +304,10 @@ function PicksTab({ me, saveMe, entries, locked, reload }) {
         ? <Banner icon={Lock}>Picks are locked — this is your final bracket.</Banner>
         : <Banner icon={ListOrdered}>Drag teams to reorder each group 1→4, then save. Editable until June 11 kickoff.</Banner>}
       {GROUP_IDS.map((g, gi) => (
-        <div key={g} className="rise" style={{ animationDelay: `${gi * 25}ms` }}><GroupCard g={g} order={preds[g]} onReorder={reorder} locked={locked} /></div>
+        <div key={g} className="rise" style={{ animationDelay: `${gi * 25}ms` }}>
+          <GroupCard g={g} order={preds[g]} onReorder={reorder} locked={locked} />
+          {locked && myEntry && <ContrarianStrip pred={preds[g]} tally={tally[g]} total={tally.total} />}
+        </div>
       ))}
       {status && <Note bad={status.bad}>{status.msg}</Note>}
       {!locked && (
@@ -349,6 +353,33 @@ function GroupCard({ g, order, onReorder, locked }) {
     </Card>
   );
 }
+function ContrarianStrip({ pred, tally, total }) {
+  if (!pred || !total) return null;
+  const labels = ["1st", "2nd", "3rd"];
+  return (
+    <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "8px 14px 10px", marginTop: -4, marginBottom: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: 1.5, color: "var(--muted)", textTransform: "uppercase", marginBottom: 4 }}>
+        <Users size={11} /> Pool agreement
+      </div>
+      {labels.map((label, i) => {
+        const team = pred[i];
+        const count = tally?.[i]?.[team] || 0;
+        const share = total > 0 ? count / total : 0;
+        const contrarian = total >= 4 && share <= 0.25;
+        return (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "2px 0" }}>
+            <span style={{ color: "var(--muted)", width: 26, fontWeight: 700, fontSize: 11 }}>{label}</span>
+            <span style={{ fontSize: 14 }}>{FLAG[team] || ""}</span>
+            <span style={{ flex: 1, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{team}</span>
+            {contrarian && <span style={{ background: "var(--gold)", color: "#0b1410", borderRadius: 4, padding: "1px 6px", fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>CONTRARIAN</span>}
+            <span style={{ color: "var(--muted)", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>{count} of {total}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StaticRow({ team, idx, last }) {
   return (
     <div className="grouprow" style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: last ? "none" : "1px solid var(--line)" }}>
@@ -386,6 +417,7 @@ function PosBadge({ idx, small }) {
 /* ------------------------------ standings -------------------------------- */
 function StandingsTab({ entries, groups, meta, locked, me }) {
   const [open, setOpen] = useState(null);
+  const tally = useMemo(() => tallyPicks(entries), [entries]);
   const counted = GROUP_IDS.map((g) => groups[g]).filter(Boolean);
   const liveCount = counted.filter((r) => r.status === "live").length;
   const finalCount = counted.filter((r) => r.status === "final").length;
@@ -434,7 +466,7 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
                   </div>
                 )}
               </button>
-              {open === r.name && <div style={{ borderTop: "1px solid var(--line)", padding: "10px 16px 14px" }}><PlayerBreakdown entry={r} groups={groups} locked={locked} isMe={isMe} /></div>}
+              {open === r.name && <div style={{ borderTop: "1px solid var(--line)", padding: "10px 16px 14px" }}><PlayerBreakdown entry={r} groups={groups} locked={locked} isMe={isMe} tally={tally} /></div>}
             </Card>
           </div>
         );
@@ -443,7 +475,7 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
   );
 }
 
-function PlayerBreakdown({ entry, groups, locked, isMe }) {
+function PlayerBreakdown({ entry, groups, locked, isMe, tally }) {
   if (!(locked || isMe)) return <div style={{ color: "var(--muted)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><EyeOff size={15} /> Picks hidden until lock (June 11).</div>;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 8 }}>
@@ -451,6 +483,7 @@ function PlayerBreakdown({ entry, groups, locked, isMe }) {
         const pred = entry.predictions?.[g] || []; const r = groups[g];
         const isLive = r?.status === "live"; const isFinal = r?.status === "final"; const isPending = r?.status === "pending";
         const pts = r && !isPending ? scoreGroup(pred, r.order) : null;
+        const top1 = pickConsensus(tally?.[g]?.[0]);
         return (
           <div key={g} style={{ background: "var(--bg2)", border: `1px solid ${isLive ? "rgba(230,57,70,.35)" : "var(--line)"}`, borderRadius: 10, padding: "8px 10px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -469,11 +502,33 @@ function PlayerBreakdown({ entry, groups, locked, isMe }) {
             })}
             {isLive && <div style={{ marginTop: 4, fontSize: 9, letterSpacing: 1, fontWeight: 800, color: "var(--red)" }}>PROJECTED</div>}
             {isPending && <div style={{ marginTop: 4, fontSize: 9, letterSpacing: 1, fontWeight: 800, color: "var(--muted)" }}>PENDING</div>}
+            {top1 && tally?.total > 0 && (
+              <div style={{ marginTop: 6, paddingTop: 5, borderTop: "1px dashed var(--line)" }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 1, color: "var(--muted)" }}>POOL 1ST</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, marginTop: 2 }}>
+                  <span>{FLAG[top1.team]}</span>
+                  <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text)" }}>{top1.team}</span>
+                  <span style={{ color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{top1.count}/{tally.total}</span>
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
     </div>
   );
+}
+
+function pickConsensus(slotMap) {
+  if (!slotMap) return null;
+  let bestTeam = null, bestCount = 0;
+  for (const team of Object.keys(slotMap)) {
+    const c = slotMap[team];
+    if (c > bestCount || (c === bestCount && bestTeam !== null && team < bestTeam)) {
+      bestTeam = team; bestCount = c;
+    }
+  }
+  return bestTeam ? { team: bestTeam, count: bestCount } : null;
 }
 
 /* --------------------------------- admin --------------------------------- */
