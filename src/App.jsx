@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ChevronUp, ChevronDown, Trophy, Lock, Unlock, Crown, Settings,
   Save, Check, RefreshCw, Medal, Users, ListOrdered, X, EyeOff, Wifi, Trash2,
-  GripVertical, HelpCircle,
+  GripVertical, HelpCircle, CalendarDays, Clock,
 } from "lucide-react";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
@@ -24,6 +24,7 @@ export default function App() {
   const [config, setConfig] = useState(null);
   const [entries, setEntries] = useState([]);
   const [groups, setGroups] = useState({});
+  const [matches, setMatches] = useState([]);
   const [meta, setMeta] = useState({});
   const [me, setMe] = useState(() => { try { return JSON.parse(localStorage.getItem(ME_KEY)); } catch { return null; } });
   const [tab, setTab] = useState("picks");
@@ -33,7 +34,7 @@ export default function App() {
   async function load() {
     try {
       const s = await api.getState();
-      setConfig(s.config); setEntries(s.entries || []); setGroups(s.groups || {}); setMeta(s.meta || {});
+      setConfig(s.config); setEntries(s.entries || []); setGroups(s.groups || {}); setMatches(s.matches || []); setMeta(s.meta || {});
     } catch (e) { /* keep last state */ }
     setReady(true);
   }
@@ -50,6 +51,7 @@ export default function App() {
       <Header config={config} locked={locked} now={now} />
       <Tabs tab={tab} setTab={setTab} count={entries.length} />
       {tab === "picks" && <PicksTab me={me} saveMe={saveMe} entries={entries} locked={locked} reload={load} />}
+      {tab === "matches" && <MatchesTab matches={matches} meta={meta} />}
       {tab === "standings" && <StandingsTab entries={entries} groups={groups} meta={meta} locked={locked} me={me} />}
       <AdminFooter groups={groups} entries={entries} reload={load} />
       <FontAndTheme />
@@ -200,7 +202,11 @@ function HelpModal({ onClose }) {
 }
 
 function Tabs({ tab, setTab, count }) {
-  const items = [{ id: "picks", label: "My Picks", icon: ListOrdered }, { id: "standings", label: `Standings${count ? " · " + count : ""}`, icon: Trophy }];
+  const items = [
+    { id: "picks", label: "My Picks", icon: ListOrdered },
+    { id: "matches", label: "Matches", icon: CalendarDays },
+    { id: "standings", label: `Standings${count ? " · " + count : ""}`, icon: Trophy },
+  ];
   return (
     <div style={{ display: "flex", gap: 8, margin: "22px 0 18px" }}>
       {items.map((it) => {
@@ -415,6 +421,99 @@ function PosBadge({ idx, small }) {
 }
 
 /* ------------------------------ standings -------------------------------- */
+/* -------------------------------- matches -------------------------------- */
+function MatchesTab({ matches, meta }) {
+  const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+  const grouped = useMemo(() => {
+    const byDate = new Map();
+    for (const m of matches) {
+      if (!m.utcDate) continue;
+      const key = new Date(m.utcDate).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key).push(m);
+    }
+    return [...byDate.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, list]) => ({
+        key,
+        label: new Date(list[0].utcDate).toLocaleDateString("en-US", {
+          timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric",
+        }),
+        matches: list,
+      }));
+  }, [matches]);
+
+  if (matches.length === 0) {
+    return <div className="rise"><Empty icon={CalendarDays} title="No fixtures yet" sub="The schedule will appear once football-data publishes it." /></div>;
+  }
+
+  return (
+    <div className="rise">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, fontSize: 13, color: "var(--muted)", flexWrap: "wrap" }}>
+        <span>{matches.length} matches · times shown in EST</span>
+        {meta?.stale && <span style={{ color: "#caa14a", display: "inline-flex", alignItems: "center", gap: 5 }}><Wifi size={13} /> showing last synced data</span>}
+      </div>
+      {grouped.map((day) => {
+        const isToday = day.key === todayKey;
+        return (
+          <div key={day.key} style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontFamily: "var(--display)", fontSize: 18, color: isToday ? "var(--pitch)" : "var(--text)", letterSpacing: 1 }}>
+              {day.label}
+              {isToday && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "var(--pitch)", color: "#0b1410", fontWeight: 800, letterSpacing: 1 }}>TODAY</span>}
+            </div>
+            {day.matches.map((m, i) => <MatchRow key={m.id ?? `${day.key}-${i}`} match={m} />)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MatchRow({ match }) {
+  const finished = match.status === "FINISHED";
+  const time = match.utcDate ? new Date(match.utcDate).toLocaleString("en-US", {
+    timeZone: "America/New_York", hour: "numeric", minute: "2-digit",
+  }) : "";
+  const stageLabel = match.group ? `GRP ${match.group}` : stageName(match.stage);
+  const homeWin = finished && match.homeScore > match.awayScore;
+  const awayWin = finished && match.awayScore > match.homeScore;
+  const dim = (won) => finished && !won ? "var(--muted)" : "var(--text)";
+  const weight = (won) => (won ? 700 : 400);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "var(--card)", border: "1px solid var(--line)", borderRadius: 10, marginTop: 6, fontSize: 13 }}>
+      <div style={{ minWidth: 52, fontFamily: "var(--display)", fontSize: 13, color: "var(--gold)", letterSpacing: 1 }}>{stageLabel}</div>
+      <div style={{ minWidth: 70, fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 4 }}>
+        {finished ? <span style={{ fontWeight: 800, color: "var(--green)" }}>FT</span> : <><Clock size={11} />{time}</>}
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end", minWidth: 0 }}>
+        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: dim(homeWin), fontWeight: weight(homeWin) }}>{match.home}</span>
+        <span>{FLAG[match.home]}</span>
+      </div>
+      <div style={{ fontFamily: "var(--display)", fontSize: 16, minWidth: 52, textAlign: "center", color: finished ? "var(--text)" : "var(--muted)" }}>
+        {finished ? `${match.homeScore}–${match.awayScore}` : "vs"}
+      </div>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        <span>{FLAG[match.away]}</span>
+        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: dim(awayWin), fontWeight: weight(awayWin) }}>{match.away}</span>
+      </div>
+    </div>
+  );
+}
+
+function stageName(stage) {
+  switch (stage) {
+    case "GROUP_STAGE": return "GRP";
+    case "LAST_32": case "ROUND_OF_32": return "R32";
+    case "LAST_16": case "ROUND_OF_16": return "R16";
+    case "QUARTER_FINALS": case "QUARTER_FINAL": return "QF";
+    case "SEMI_FINALS": case "SEMI_FINAL": return "SF";
+    case "THIRD_PLACE": return "3RD";
+    case "FINAL": return "FINAL";
+    default: return stage || "—";
+  }
+}
+
 function StandingsTab({ entries, groups, meta, locked, me }) {
   const [open, setOpen] = useState(null);
   const tally = useMemo(() => tallyPicks(entries), [entries]);

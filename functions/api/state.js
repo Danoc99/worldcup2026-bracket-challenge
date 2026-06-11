@@ -1,5 +1,5 @@
 import { json } from "../_lib/util.js";
-import { getGroupOrders } from "../_lib/fd.js";
+import { getGroupOrders, getMatches } from "../_lib/fd.js";
 
 const LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
 
@@ -25,8 +25,8 @@ export async function onRequestGet({ env }) {
   let manual = { groups: {} };
   try { manual = (await POOL.get("manualResults", "json")) || { groups: {} }; } catch {}
 
-  // live orders from football-data (cached, serve-stale on failure)
-  const api = await getGroupOrders(env);
+  // live orders + full fixtures list from football-data (cached, serve-stale on failure)
+  const [api, fixtures] = await Promise.all([getGroupOrders(env), getMatches(env)]);
 
   // merge: admin override wins, else API, else pending(null)
   const groups = {};
@@ -39,6 +39,7 @@ export async function onRequestGet({ env }) {
     config: safeConfig,
     entries,
     groups,
+    matches: fixtures.matches || [],
     meta: { fetchedAt: api.fetchedAt, stale: api.stale, error: api.error || null, unmapped: api.unmapped || [] },
   });
 }
