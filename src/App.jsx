@@ -65,7 +65,7 @@ export default function App() {
       {tab === "picks" && <PicksTab me={me} saveMe={saveMe} entries={entries} locked={locked} reload={load} />}
       {tab === "matches" && <MatchesTab matches={matches} meta={meta} />}
       {tab === "standings" && <StandingsTab entries={entries} groups={groups} meta={meta} locked={locked} me={me} />}
-      <AdminFooter groups={groups} entries={entries} reload={load} />
+      <AdminFooter groups={groups} entries={entries} matches={matches} reload={load} />
       <FontAndTheme />
     </Shell>
   );
@@ -484,12 +484,15 @@ function MatchesTab({ matches, meta }) {
 
 function MatchRow({ match }) {
   const finished = match.status === "FINISHED";
+  // Guard: feed sometimes flips status to FINISHED before populating scores.
+  // Without this we'd render "null–null" — show a dash instead and never bold a "winner".
+  const hasScore = finished && match.homeScore != null && match.awayScore != null;
   const time = match.utcDate ? new Date(match.utcDate).toLocaleString("en-US", {
     timeZone: "America/New_York", hour: "numeric", minute: "2-digit",
   }) : "";
   const stageLabel = match.group ? `GRP ${match.group}` : stageName(match.stage);
-  const homeWin = finished && match.homeScore > match.awayScore;
-  const awayWin = finished && match.awayScore > match.homeScore;
+  const homeWin = hasScore && match.homeScore > match.awayScore;
+  const awayWin = hasScore && match.awayScore > match.homeScore;
   const dim = (won) => finished && !won ? "var(--muted)" : "var(--text)";
   const weight = (won) => (won ? 700 : 400);
   return (
@@ -502,8 +505,8 @@ function MatchRow({ match }) {
         <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: dim(homeWin), fontWeight: weight(homeWin) }}>{match.home}</span>
         <span>{FLAG[match.home]}</span>
       </div>
-      <div style={{ fontFamily: "var(--display)", fontSize: 16, minWidth: 52, textAlign: "center", color: finished ? "var(--text)" : "var(--muted)" }}>
-        {finished ? `${match.homeScore}–${match.awayScore}` : "vs"}
+      <div style={{ fontFamily: "var(--display)", fontSize: 16, minWidth: 52, textAlign: "center", color: hasScore ? "var(--text)" : "var(--muted)" }}>
+        {hasScore ? `${match.homeScore}–${match.awayScore}` : finished ? "—" : "vs"}
       </div>
       <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
         <span>{FLAG[match.away]}</span>
@@ -643,7 +646,7 @@ function pickConsensus(slotMap) {
 }
 
 /* --------------------------------- admin --------------------------------- */
-function AdminFooter({ groups, entries, reload }) {
+function AdminFooter({ groups, entries, matches, reload }) {
   const [show, setShow] = useState(false);
   return (
     <>
@@ -651,12 +654,12 @@ function AdminFooter({ groups, entries, reload }) {
         <button className="btn" onClick={() => setShow(true)} style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--muted)", padding: "8px 14px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 7 }}><Settings size={14} /> Admin · override results</button>
         <div style={{ color: "#46506b", fontSize: 11, marginTop: 14 }}>World Cup 2026 · live scores auto-update · knockout bracket unlocks after the group stage</div>
       </div>
-      {show && <AdminModal groups={groups} entries={entries} reload={reload} onClose={() => setShow(false)} />}
+      {show && <AdminModal groups={groups} entries={entries} matches={matches} reload={reload} onClose={() => setShow(false)} />}
     </>
   );
 }
 
-function AdminModal({ groups, entries, reload, onClose }) {
+function AdminModal({ groups, entries, matches, reload, onClose }) {
   const [pw, setPw] = useState(""); const [authed, setAuthed] = useState(false); const [err, setErr] = useState(null);
   const [draft, setDraft] = useState(() => { const d = {}; GROUP_IDS.forEach((g) => (d[g] = groups[g]?.order ? [...groups[g].order] : [...GROUPS[g]])); return d; });
   // mode per group: "auto" (follow API), "live" (manual), "final" (manual)
@@ -714,6 +717,7 @@ function AdminModal({ groups, entries, reload, onClose }) {
                 ))
               )}
             </div>
+            <MatchScoresCard pw={pw} matches={matches} reload={reload} setMsg={setMsg} />
             <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>
               Standings update from the live feed on their own — you usually don't need to touch this. Use it only to <b style={{ color: "var(--muted)" }}>override</b> a group: <b style={{ color: "var(--text)" }}>Auto</b> follows the feed, <b style={{ color: "var(--red)" }}>Live</b>/<b style={{ color: "var(--green)" }}>Final</b> force your own order (handy for fixing an official tiebreaker the feed gets wrong).
             </p>
@@ -743,6 +747,69 @@ function AdminModal({ groups, entries, reload, onClose }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// FINISHED-only safeguard: lets admin fill in a final score when the feed
+// flips status to FINISHED before populating score.fullTime, or correct a
+// wrong score. Empty inputs + Save clears the override for that match.
+function MatchScoresCard({ pw, matches, reload, setMsg }) {
+  const finished = useMemo(() => (matches || []).filter((m) => m.status === "FINISHED"), [matches]);
+  const [drafts, setDrafts] = useState({});
+  const [savingId, setSavingId] = useState(null);
+
+  function setDraft(id, side, v) {
+    setDrafts((p) => ({ ...p, [id]: { ...(p[id] || {}), [side]: v.replace(/[^\d]/g, "").slice(0, 2) } }));
+  }
+  async function save(m, clear = false) {
+    const d = drafts[m.id] || {};
+    const home = clear ? "" : (d.home ?? (m.homeScore ?? ""));
+    const away = clear ? "" : (d.away ?? (m.awayScore ?? ""));
+    setSavingId(m.id); setMsg(null);
+    try {
+      await api.adminSetMatchScore(pw.trim(), m.id, home === "" ? null : Number(home), away === "" ? null : Number(away));
+      setDrafts((p) => { const n = { ...p }; delete n[m.id]; return n; });
+      setMsg(clear ? `Cleared override for ${m.home} v ${m.away}.` : `Saved ${m.home} ${home}–${away} ${m.away}.`);
+      reload();
+    } catch (e) { setMsg("ERR: " + e.message); }
+    setSavingId(null);
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+      <div style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)", marginBottom: 4 }}>MATCH SCORE OVERRIDES</div>
+      <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
+        Safeguard for finished matches. Fill in a score if the feed marked the match final without one ({" "}
+        <span style={{ color: "var(--red)", fontWeight: 700 }}>MISSING</span>{" "}), or overwrite a wrong one. Leave both blank and Save to revert to the feed.
+      </div>
+      {finished.length === 0 ? (
+        <div style={{ color: "var(--muted)", fontSize: 13 }}>No finished matches yet.</div>
+      ) : finished.map((m) => {
+        const d = drafts[m.id] || {};
+        const homeVal = d.home ?? (m.homeScore == null ? "" : String(m.homeScore));
+        const awayVal = d.away ?? (m.awayScore == null ? "" : String(m.awayScore));
+        const missing = m.homeScore == null || m.awayScore == null;
+        const isOverride = m.scoreSource === "admin";
+        const busy = savingId === m.id;
+        return (
+          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
+            <span style={{ minWidth: 46, fontFamily: "var(--display)", fontSize: 12, color: "var(--gold)", letterSpacing: 1 }}>{m.group ? `GRP ${m.group}` : stageName(m.stage)}</span>
+            <span style={{ flex: 1, fontSize: 13, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.home} v {m.away}</span>
+            {missing && <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 999, background: "rgba(230,57,70,.18)", color: "var(--red)", fontWeight: 800, letterSpacing: 1 }}>MISSING</span>}
+            {isOverride && !missing && <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 999, background: "rgba(46,230,166,.18)", color: "var(--green)", fontWeight: 800, letterSpacing: 1 }}>OVERRIDE</span>}
+            <input value={homeVal} onChange={(e) => setDraft(m.id, "home", e.target.value)} inputMode="numeric" placeholder="–" style={{ width: 38, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: "var(--text)", fontSize: 14, textAlign: "center", outline: "none" }} />
+            <span style={{ color: "var(--muted)" }}>–</span>
+            <input value={awayVal} onChange={(e) => setDraft(m.id, "away", e.target.value)} inputMode="numeric" placeholder="–" style={{ width: 38, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: "var(--text)", fontSize: 14, textAlign: "center", outline: "none" }} />
+            <button className="btn" disabled={busy} onClick={() => save(m)} style={{ background: "var(--bg2)", border: "1px solid var(--line)", color: "var(--text)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, opacity: busy ? .5 : 1 }}>
+              {busy ? <RefreshCw size={12} className="spin" /> : <Save size={12} />} Save
+            </button>
+            {isOverride && (
+              <button className="btn" disabled={busy} onClick={() => save(m, true)} style={{ background: "transparent", border: "1px solid rgba(230,57,70,.35)", color: "var(--red)", padding: "5px 10px", fontSize: 12, opacity: busy ? .5 : 1 }}>Clear</button>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

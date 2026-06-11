@@ -24,6 +24,8 @@ export async function onRequestGet({ env }) {
   // admin manual overrides
   let manual = { groups: {} };
   try { manual = (await POOL.get("manualResults", "json")) || { groups: {} }; } catch {}
+  let manualScores = {};
+  try { manualScores = (await POOL.get("manualMatchScores", "json")) || {}; } catch {}
 
   // live orders + full fixtures list from football-data (cached, serve-stale on failure)
   const [api, fixtures] = await Promise.all([getGroupOrders(env), getMatches(env)]);
@@ -35,11 +37,19 @@ export async function onRequestGet({ env }) {
     else if (api.groups[L]) groups[L] = api.groups[L];
   }
 
+  // Admin match-score overrides — by id, win over the feed even when the feed
+  // has a score (so admin can also correct a wrong score, not just fill nulls).
+  const matches = (fixtures.matches || []).map((m) => {
+    const override = m.id != null ? manualScores[m.id] : null;
+    if (!override) return m;
+    return { ...m, homeScore: override.home, awayScore: override.away, scoreSource: "admin" };
+  });
+
   return json({
     config: safeConfig,
     entries,
     groups,
-    matches: fixtures.matches || [],
+    matches,
     meta: { fetchedAt: api.fetchedAt, stale: api.stale, error: api.error || null, unmapped: api.unmapped || [] },
   });
 }
