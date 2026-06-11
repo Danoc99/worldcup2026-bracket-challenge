@@ -38,7 +38,19 @@ export default function App() {
     } catch (e) { /* keep last state */ }
     setReady(true);
   }
-  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
+  // Poll /api/state every 5 minutes, and only while the tab is visible.
+  // Each call costs ~(3 + N entries) KV reads; with friends leaving tabs open,
+  // a 60s poll burns through the daily free-tier KV budget fast. The football-
+  // data feed is server-cached for 10 min anyway (functions/_lib/fd.js), so a
+  // shorter client poll wouldn't even buy fresher data. Manual refresh always
+  // triggers an immediate fetch.
+  useEffect(() => {
+    load();
+    const t = setInterval(() => { if (document.visibilityState === "visible") load(); }, 5 * 60 * 1000);
+    const onVis = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVis); };
+  }, []);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
 
   function saveMe(identity) { setMe(identity); try { identity ? localStorage.setItem(ME_KEY, JSON.stringify(identity)) : localStorage.removeItem(ME_KEY); } catch {} }
