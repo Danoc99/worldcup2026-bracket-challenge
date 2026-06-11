@@ -36,6 +36,45 @@ export function ordersFromStandings(json) {
   return { groups, unmapped };
 }
 
+// matchesFromFeed(json) → array of every match the feed returned, normalized
+// to our canonical team names and sorted by kickoff (utcDate) ascending.
+// Drops a match if EITHER team can't be mapped (the Matches tab would render
+// gibberish otherwise; admin can override group orders but individual fixtures
+// have no override path). Score is only meaningful for FINISHED — for any
+// other status the score fields are null so the UI doesn't render "0–0" for a
+// match that hasn't kicked off.
+export function matchesFromFeed(json) {
+  const out = [];
+  const unmapped = [];
+  const matches = (json && json.matches) || [];
+  for (const m of matches) {
+    const home = mapTeam(m.homeTeam?.name, m.homeTeam?.tla);
+    const away = mapTeam(m.awayTeam?.name, m.awayTeam?.tla);
+    if (!home) unmapped.push(m.homeTeam?.name || m.homeTeam?.tla);
+    if (!away) unmapped.push(m.awayTeam?.name || m.awayTeam?.tla);
+    if (!home || !away) continue;
+    const finished = m.status === "FINISHED";
+    out.push({
+      id: m.id ?? null,
+      utcDate: m.utcDate || null,
+      stage: m.stage || null,
+      group: m.group ? String(m.group).replace(/^GROUP[_\s-]?/i, "").toUpperCase() : null,
+      status: m.status || null,
+      matchday: m.matchday ?? null,
+      home,
+      away,
+      homeScore: finished ? (m.score?.fullTime?.home ?? null) : null,
+      awayScore: finished ? (m.score?.fullTime?.away ?? null) : null,
+    });
+  }
+  out.sort((a, b) => {
+    const ad = a.utcDate ? Date.parse(a.utcDate) : Infinity;
+    const bd = b.utcDate ? Date.parse(b.utcDate) : Infinity;
+    return ad - bd;
+  });
+  return { matches: out, unmapped };
+}
+
 export function ordersFromMatches(json) {
   // Build provisional tables from finished group-stage matches.
   const tables = {}; // letter -> { team -> stats }

@@ -1,6 +1,6 @@
 import fs from "fs";
 import assert from "assert";
-import { ordersFromStandings, ordersFromMatches } from "../functions/_lib/transform.js";
+import { ordersFromStandings, ordersFromMatches, matchesFromFeed } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { LOCK_ISO } from "../functions/_lib/util.js";
@@ -197,6 +197,58 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   const t = tallyPicks([{ name: "x" }, { name: "y", predictions: { A: ["Mexico", "Czechia", "South Korea", "South Africa"] } }]);
   ok("tallyPicks: missing-predictions entries excluded from total", t.total === 1);
   ok("tallyPicks: entries with picks fill buckets", t.A[0]["Mexico"] === 1);
+}
+
+// 8) matchesFromFeed — Matches tab needs every status (not just FINISHED),
+//    sorted chronologically, with scores ONLY on FINISHED matches.
+{
+  const feed = {
+    matches: [
+      // Out of order on purpose to test the sort.
+      { id: 2, utcDate: "2026-06-12T19:00:00Z", stage: "GROUP_STAGE", group: "GROUP_B", status: "SCHEDULED",
+        homeTeam: { name: "Canada", tla: "CAN" }, awayTeam: { name: "Switzerland", tla: "SUI" } },
+      { id: 1, utcDate: "2026-06-11T20:00:00Z", stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "South Korea", tla: "KOR" },
+        score: { fullTime: { home: 2, away: 1 } } },
+      { id: 3, utcDate: "2026-06-13T18:00:00Z", stage: "GROUP_STAGE", group: "GROUP_C", status: "TIMED",
+        homeTeam: { name: "Brazil", tla: "BRA" }, awayTeam: { name: "Scotland", tla: "SCO" } },
+    ],
+  };
+  const { matches, unmapped } = matchesFromFeed(feed);
+  ok("matchesFromFeed: includes all 3 statuses (FINISHED+SCHEDULED+TIMED)", matches.length === 3);
+  ok("matchesFromFeed: sorted ascending by utcDate", matches[0].id === 1 && matches[1].id === 2 && matches[2].id === 3);
+  ok("matchesFromFeed: FINISHED carries final score", matches[0].homeScore === 2 && matches[0].awayScore === 1);
+  ok("matchesFromFeed: non-FINISHED has null score", matches[1].homeScore === null && matches[2].homeScore === null);
+  ok("matchesFromFeed: strips GROUP_ prefix from group letter", matches[0].group === "A" && matches[1].group === "B");
+  ok("matchesFromFeed: nothing unmapped for canonical names", unmapped.length === 0);
+}
+
+// Skip matches with an unmappable team — better to drop the row than render
+// gibberish, since admins have no per-match override.
+{
+  const feed = {
+    matches: [
+      { id: 1, utcDate: "2026-06-11T20:00:00Z", status: "FINISHED",
+        homeTeam: { name: "Wakanda" }, awayTeam: { name: "Mexico", tla: "MEX" },
+        score: { fullTime: { home: 0, away: 3 } } },
+      { id: 2, utcDate: "2026-06-12T20:00:00Z", status: "FINISHED",
+        homeTeam: { name: "Canada", tla: "CAN" }, awayTeam: { name: "Switzerland", tla: "SUI" },
+        score: { fullTime: { home: 1, away: 1 } } },
+    ],
+  };
+  const { matches, unmapped } = matchesFromFeed(feed);
+  ok("matchesFromFeed: drops match with unmappable team", matches.length === 1 && matches[0].id === 2);
+  ok("matchesFromFeed: reports the unmapped name", unmapped.includes("Wakanda"));
+}
+
+// Empty / missing inputs must not throw.
+{
+  const a = matchesFromFeed(null);
+  const b = matchesFromFeed({});
+  const c = matchesFromFeed({ matches: [] });
+  ok("matchesFromFeed(null) safe", a.matches.length === 0);
+  ok("matchesFromFeed({}) safe", b.matches.length === 0);
+  ok("matchesFromFeed({matches:[]}) safe", c.matches.length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
