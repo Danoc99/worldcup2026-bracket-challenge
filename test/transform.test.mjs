@@ -3,7 +3,9 @@ import assert from "assert";
 import { ordersFromStandings, ordersFromMatches, matchesFromFeed } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
-import { LOCK_ISO } from "../functions/_lib/util.js";
+import { onRequestPost as adminPost } from "../functions/api/admin.js";
+import { onRequestGet as stateGet } from "../functions/api/state.js";
+import { LOCK_ISO, hashStr } from "../functions/_lib/util.js";
 import { tallyPicks } from "../src/data.js";
 
 // Our canonical groups (must match the front end)
@@ -249,6 +251,122 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   ok("matchesFromFeed(null) safe", a.matches.length === 0);
   ok("matchesFromFeed({}) safe", b.matches.length === 0);
   ok("matchesFromFeed({matches:[]}) safe", c.matches.length === 0);
+}
+
+// 9) admin.js setMatchScore — safeguard for FINISHED matches that arrive
+//    from the feed with null scores, or admin corrections to a wrong score.
+//    Writes to a new KV key `manualMatchScores` keyed by football-data match id.
+{
+  const ADMIN_PW = "letmein";
+  function makePool(seed = {}) {
+    const kv = { config: { poolName: "p", adminHash: hashStr(ADMIN_PW), createdAt: 0 }, ...seed };
+    return {
+      get: async (k, t) => { const v = kv[k] ?? null; return t === "json" || v == null ? v : JSON.stringify(v); },
+      put: async (k, v) => { kv[k] = JSON.parse(v); },
+      delete: async (k) => { delete kv[k]; },
+      _kv: kv,
+    };
+  }
+  async function adminCall(POOL, body) {
+    const req = new Request("http://x/api/admin", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    const res = await adminPost({ request: req, env: { POOL } });
+    return { status: res.status, payload: await res.json() };
+  }
+
+  // Wrong password is rejected before any KV write.
+  {
+    const POOL = makePool();
+    const r = await adminCall(POOL, { adminPassword: "nope", action: "setMatchScore", matchId: 537327, home: 2, away: 1 });
+    ok("setMatchScore: wrong password → 403", r.status === 403);
+    ok("setMatchScore: wrong password → no KV write", POOL._kv.manualMatchScores === undefined);
+  }
+  // Valid write persists under the match id.
+  {
+    const POOL = makePool();
+    const r = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 537327, home: 2, away: 1 });
+    ok("setMatchScore: valid write → 200", r.status === 200 && r.payload.ok === true);
+    ok("setMatchScore: persisted under id", POOL._kv.manualMatchScores?.["537327"]?.home === 2);
+    ok("setMatchScore: persisted away score", POOL._kv.manualMatchScores?.["537327"]?.away === 1);
+  }
+  // Bad payloads rejected (non-integer, negative, missing id).
+  {
+    const POOL = makePool();
+    const bad1 = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 0, home: 1, away: 0 });
+    const bad2 = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 1, home: -1, away: 0 });
+    const bad3 = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 1, home: 1.5, away: 0 });
+    ok("setMatchScore: rejects matchId 0", bad1.status === 400);
+    ok("setMatchScore: rejects negative score", bad2.status === 400);
+    ok("setMatchScore: rejects non-integer score", bad3.status === 400);
+  }
+  // Empty/null clears the override for that match without disturbing others.
+  {
+    const POOL = makePool({ manualMatchScores: { "1": { home: 2, away: 1 }, "2": { home: 0, away: 0 } } });
+    const r = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 1, home: "", away: "" });
+    ok("setMatchScore: clear → 200 with cleared:true", r.status === 200 && r.payload.cleared === true);
+    ok("setMatchScore: cleared entry removed", POOL._kv.manualMatchScores["1"] === undefined);
+    ok("setMatchScore: other entries untouched", POOL._kv.manualMatchScores["2"]?.home === 0);
+  }
+}
+
+// 10) state.js — admin manualMatchScores overlay merges onto feed matches by id.
+//     Override always wins, including over a non-null feed score. Matches with
+//     no override pass through untouched. Achieved by prepopulating the
+//     fd.js caches (cache:standings, cache:matches) so state.js never fetches.
+{
+  const now = Date.now();
+  function makeStatePool(seed = {}) {
+    const kv = {
+      config: { poolName: "p", adminHash: "x", createdAt: 0 },
+      "cache:standings": { groups: {}, unmapped: [], fetchedAt: now },
+      "cache:matches": {
+        matches: [
+          { id: 100, utcDate: "2026-06-11T19:00:00Z", group: "A", status: "FINISHED", home: "Mexico", away: "South Africa", homeScore: null, awayScore: null },
+          { id: 101, utcDate: "2026-06-12T19:00:00Z", group: "B", status: "FINISHED", home: "Canada",  away: "Switzerland",  homeScore: 1,    awayScore: 0 },
+          { id: 102, utcDate: "2026-06-13T19:00:00Z", group: "C", status: "SCHEDULED", home: "Brazil", away: "Scotland",     homeScore: null, awayScore: null },
+        ],
+        unmapped: [], fetchedAt: now,
+      },
+      ...seed,
+    };
+    return {
+      get: async (k, t) => { const v = kv[k] ?? null; return t === "json" || v == null ? v : JSON.stringify(v); },
+      put: async (k, v) => { kv[k] = JSON.parse(v); },
+      delete: async (k) => { delete kv[k]; },
+      list: async () => ({ keys: [] }),
+    };
+  }
+  async function callState(POOL) {
+    const res = await stateGet({ env: { POOL } });
+    return await res.json();
+  }
+
+  // No overrides → matches pass through untouched.
+  {
+    const s = await callState(makeStatePool());
+    ok("state overlay: no override → match untouched", s.matches.find((m) => m.id === 100).homeScore === null);
+    ok("state overlay: no override → scoreSource absent", s.matches.find((m) => m.id === 101).scoreSource === undefined);
+  }
+  // Override fills a null feed score (the safeguard case).
+  {
+    const s = await callState(makeStatePool({ manualMatchScores: { "100": { home: 2, away: 1 } } }));
+    const m = s.matches.find((x) => x.id === 100);
+    ok("state overlay: override fills null feed score", m.homeScore === 2 && m.awayScore === 1);
+    ok("state overlay: override flagged with scoreSource:admin", m.scoreSource === "admin");
+  }
+  // Override wins over a non-null feed score (admin correction).
+  {
+    const s = await callState(makeStatePool({ manualMatchScores: { "101": { home: 3, away: 3 } } }));
+    const m = s.matches.find((x) => x.id === 101);
+    ok("state overlay: override beats feed score", m.homeScore === 3 && m.awayScore === 3);
+  }
+  // Override for an id not in the feed is ignored (no match to attach to).
+  {
+    const s = await callState(makeStatePool({ manualMatchScores: { "999": { home: 5, away: 5 } } }));
+    ok("state overlay: phantom-id override doesn't add a match", s.matches.length === 3);
+    ok("state overlay: phantom-id override doesn't mutate others", s.matches.every((m) => m.scoreSource === undefined));
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

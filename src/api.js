@@ -18,4 +18,6 @@ export const api = {
     req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, groups }) }),
   adminDeleteEntry: (adminPassword, name) =>
     req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, action: "deleteEntry", name }) }),
+  adminSetMatchScore: (adminPassword, matchId, home, away) =>
+    req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, action: "setMatchScore", matchId, home, away }) }),
 };

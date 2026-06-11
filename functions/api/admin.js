@@ -28,6 +28,30 @@ export async function onRequestPost({ request, env }) {
     return json({ ok: true, deleted: s });
   }
 
+  // Set or clear an admin override for a single match's final score, keyed by
+  // football-data match id. Safeguard for the case where the feed flips a match
+  // to FINISHED before populating score.fullTime.{home,away}. home/away null or
+  // "" clears the override for that match.
+  if (body.action === "setMatchScore") {
+    const id = Number(body.matchId);
+    if (!Number.isInteger(id) || id <= 0) return json({ error: "Bad matchId." }, 400);
+    const blank = (v) => v === null || v === undefined || v === "";
+    const clear = blank(body.home) && blank(body.away);
+    let scores = {};
+    try { scores = (await POOL.get("manualMatchScores", "json")) || {}; } catch {}
+    if (clear) {
+      delete scores[id];
+    } else {
+      const h = Number(body.home), a = Number(body.away);
+      if (!Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0 || h > 99 || a > 99) {
+        return json({ error: "Scores must be whole numbers 0–99." }, 400);
+      }
+      scores[id] = { home: h, away: a };
+    }
+    await POOL.put("manualMatchScores", JSON.stringify(scores));
+    return json({ ok: true, cleared: clear });
+  }
+
   // save overrides: body.groups = { A: {order:[4], status:"live"|"final"} | null, ... }
   let manual = { groups: {} };
   try { manual = (await POOL.get("manualResults", "json")) || { groups: {} }; } catch {}
