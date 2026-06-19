@@ -184,7 +184,11 @@ function HelpModal({ onClose }) {
             </div>
             <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
               <span style={{ color: "var(--green)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Green name ✓</span>
-              <span>Same as red, but the group is officially done. Points locked in.</span>
+              <span>Same as red, but either the group is officially done OR that team has mathematically clinched the slot — no remaining results can move them out.</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
+              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>▲ / ▼</span>
+              <span>How that team moved in the real standings since the last matchday — green up, red down. Blank means no change (or no prior matchday to compare).</span>
             </div>
             <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
               <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>White name</span>
@@ -605,11 +609,17 @@ function PlayerBreakdown({ entry, groups, locked, isMe, tally }) {
               {pts !== null ? <span style={{ fontWeight: 800, fontSize: 13, color: isLive ? "var(--red)" : "var(--green)" }}>{isLive ? "~" : "+"}{pts}</span> : <span style={{ fontSize: 10, color: "#46506b" }}>—</span>}
             </div>
             {pred.map((t, i) => {
-              const correct = isFinal && r.order[i] === t; const liveMatch = isLive && r.order[i] === t;
+              const teamAtSlot = r?.order?.[i];
+              const clinchedHere = r?.clinched?.[teamAtSlot] === i + 1;
+              const correct = (isFinal || clinchedHere) && teamAtSlot === t;
+              const liveMatch = isLive && !clinchedHere && teamAtSlot === t;
+              const move = r?.movement?.[t]; // up | down | null — on the predicted team's real movement
               return (
                 <div key={t} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, opacity: i === 3 ? .55 : 1, marginBottom: 2 }}>
                   <span style={{ color: "var(--muted)", width: 10 }}>{i + 1}</span><span>{FLAG[t]}</span>
                   <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: correct ? "var(--green)" : liveMatch ? "var(--red)" : "var(--text)" }}>{t}</span>
+                  {move === "up" && <ChevronUp size={12} style={{ color: "var(--green)" }} />}
+                  {move === "down" && <ChevronDown size={12} style={{ color: "var(--red)" }} />}
                   {correct && <Check size={12} style={{ color: "var(--green)" }} />}
                 </div>
               );

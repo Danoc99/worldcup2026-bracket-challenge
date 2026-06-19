@@ -1,6 +1,6 @@
 import fs from "fs";
 import assert from "assert";
-import { ordersFromStandings, ordersFromMatches, matchesFromFeed } from "../functions/_lib/transform.js";
+import { ordersFromStandings, ordersFromMatches, matchesFromFeed, clinchedPositions, movementVsPrev } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { onRequestPost as adminPost } from "../functions/api/admin.js";
@@ -367,6 +367,136 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
     ok("state overlay: phantom-id override doesn't add a match", s.matches.length === 3);
     ok("state overlay: phantom-id override doesn't mutate others", s.matches.every((m) => m.scoreSource === undefined));
   }
+}
+
+// 11) clinchedPositions — a team's slot is "clinched" iff no remaining-match
+//     scenario can move them out. We use a strict points-only check (no GD/H2H
+//     assumption) so we never give a false positive: tied-points scenarios always
+//     resolve to "not clinched" because goal margins are unbounded.
+{
+  // Strong leader: 9 pts after 3 games (group fully done) → 1st clinched trivially.
+  // We still run the check on this shape to confirm "all played" → all clinched.
+  const finalGroup = [
+    { team: "Mexico",       points: 9, played: 3, gf: 6, ga: 1 },
+    { team: "South Africa", points: 4, played: 3, gf: 3, ga: 3 },
+    { team: "Czechia",      points: 3, played: 3, gf: 2, ga: 4 },
+    { team: "South Korea",  points: 1, played: 3, gf: 1, ga: 4 },
+  ];
+  const c = clinchedPositions(finalGroup);
+  ok("clinched: fully played → all teams clinched", c.Mexico === 1 && c["South Africa"] === 2 && c.Czechia === 3 && c["South Korea"] === 4);
+
+  // Leader 7 pts, 1 game left. 2nd has 3 pts, 1 game left (max 6 < 7). Clinched.
+  const bigLead = [
+    { team: "Mexico",       points: 7, played: 2, gf: 4, ga: 0 },
+    { team: "South Africa", points: 3, played: 2, gf: 1, ga: 1 },
+    { team: "Czechia",      points: 1, played: 2, gf: 1, ga: 2 },
+    { team: "South Korea",  points: 0, played: 2, gf: 0, ga: 3 },
+  ];
+  const c2 = clinchedPositions(bigLead);
+  ok("clinched: leader 7 vs max-6 → 1st locked", c2.Mexico === 1);
+  ok("clinched: gap below not yet locked → 2nd/3rd null", c2["South Africa"] === null && c2.Czechia === null);
+
+  // Mexico's reported case: 6 pts after 2 games, 2nd has 3. 2nd's max is 6 → tied
+  // possible → NOT clinched on points alone (could be passed via GD). Documented
+  // limitation: this fires the user's exact scenario as "not clinched".
+  const tiedPossible = [
+    { team: "Mexico",       points: 6, played: 2, gf: 3, ga: 0 },
+    { team: "South Africa", points: 3, played: 2, gf: 2, ga: 2 },
+    { team: "Czechia",      points: 3, played: 2, gf: 1, ga: 1 },
+    { team: "South Korea",  points: 0, played: 2, gf: 0, ga: 3 },
+  ];
+  const c3 = clinchedPositions(tiedPossible);
+  ok("clinched: tied-points-possible → not clinched (conservative)", c3.Mexico === null);
+
+  // Pre-tournament (all 0/0/0). No team is clinched.
+  const pending = [
+    { team: "Mexico",       points: 0, played: 0, gf: 0, ga: 0 },
+    { team: "South Africa", points: 0, played: 0, gf: 0, ga: 0 },
+    { team: "Czechia",      points: 0, played: 0, gf: 0, ga: 0 },
+    { team: "South Korea",  points: 0, played: 0, gf: 0, ga: 0 },
+  ];
+  const c4 = clinchedPositions(pending);
+  ok("clinched: all 0 pts → nothing clinched", Object.values(c4).every((v) => v === null));
+
+  // Bottom-clinch: last place after MD2 with 0 pts, max 3, next-up has 7. 4th locked.
+  const bottomLocked = [
+    { team: "Mexico",       points: 7, played: 2, gf: 5, ga: 0 },
+    { team: "South Africa", points: 7, played: 2, gf: 4, ga: 1 },
+    { team: "Czechia",      points: 7, played: 2, gf: 3, ga: 1 },
+    { team: "South Korea",  points: 0, played: 2, gf: 0, ga: 6 },
+  ];
+  const c5 = clinchedPositions(bottomLocked);
+  ok("clinched: bottom team can't catch any → 4th locked", c5["South Korea"] === 4);
+}
+
+// 12) movementVsPrev — ▲/▼ relative to the prior matchday's end-of-MD order.
+{
+  const prev = ["A", "B", "C", "D"];
+  // Same order → all null.
+  {
+    const m = movementVsPrev(["A","B","C","D"], prev);
+    ok("movement: same order → all null", Object.values(m).every((v) => v === null));
+  }
+  // B moved up (was 2nd, now 1st); A moved down (was 1st, now 2nd).
+  {
+    const m = movementVsPrev(["B","A","C","D"], prev);
+    ok("movement: B up", m.B === "up");
+    ok("movement: A down", m.A === "down");
+    ok("movement: C/D unchanged → null", m.C === null && m.D === null);
+  }
+  // D leaped from 4th to 1st (up); A fell from 1st to 4th (down).
+  {
+    const m = movementVsPrev(["D","B","C","A"], prev);
+    ok("movement: D leap up", m.D === "up");
+    ok("movement: A fall down", m.A === "down");
+  }
+  // No prev snapshot → every team null.
+  {
+    const m = movementVsPrev(["A","B","C","D"], null);
+    ok("movement: no snapshot → all null", Object.values(m).every((v) => v === null));
+  }
+  // Empty current order is safe and returns {}.
+  {
+    const m = movementVsPrev([], prev);
+    ok("movement: empty current → {}", Object.keys(m).length === 0);
+  }
+  // Team absent from prev (e.g., feed renamed) → null for that team.
+  {
+    const m = movementVsPrev(["A","B","C","NEW"], prev);
+    ok("movement: team missing from prev → null", m.NEW === null);
+  }
+}
+
+// 13) Integration: ordersFromStandings now emits a `clinched` field per group
+//     (additive — no shape break). Empty for pending groups.
+{
+  const finalFeed = {
+    standings: [{
+      group: "GROUP_A", type: "TOTAL",
+      table: [
+        { position: 1, team: { name: "Mexico", tla: "MEX" }, playedGames: 3, points: 9, goalsFor: 6, goalsAgainst: 1 },
+        { position: 2, team: { name: "South Africa", tla: "RSA" }, playedGames: 3, points: 4, goalsFor: 3, goalsAgainst: 3 },
+        { position: 3, team: { name: "Czechia", tla: "CZE" }, playedGames: 3, points: 3, goalsFor: 2, goalsAgainst: 4 },
+        { position: 4, team: { name: "South Korea", tla: "KOR" }, playedGames: 3, points: 1, goalsFor: 1, goalsAgainst: 4 },
+      ],
+    }],
+  };
+  const { groups: g } = ordersFromStandings(finalFeed);
+  ok("ordersFromStandings: emits clinched on final group", g.A?.clinched?.Mexico === 1 && g.A?.clinched?.["South Korea"] === 4);
+
+  const pendingFeed = {
+    standings: [{
+      group: "GROUP_A", type: "TOTAL",
+      table: [
+        { position: 1, team: { name: "Mexico", tla: "MEX" }, playedGames: 0 },
+        { position: 2, team: { name: "South Korea", tla: "KOR" }, playedGames: 0 },
+        { position: 3, team: { name: "South Africa", tla: "RSA" }, playedGames: 0 },
+        { position: 4, team: { name: "Czechia", tla: "CZE" }, playedGames: 0 },
+      ],
+    }],
+  };
+  const { groups: g2 } = ordersFromStandings(pendingFeed);
+  ok("ordersFromStandings: pending group has empty clinched", g2.A?.clinched && Object.keys(g2.A.clinched).length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

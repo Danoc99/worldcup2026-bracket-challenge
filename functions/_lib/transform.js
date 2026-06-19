@@ -1,11 +1,59 @@
-// Turns football-data.org responses into { groups: { A:{order,status}, ... }, unmapped:[] }
+// Turns football-data.org responses into { groups: { A:{order,status,clinched}, ... }, unmapped:[] }
 // status: "pending" (no games played yet — feed order is just seed/draw),
 //         "live" (group in progress), or "final" (all 4 teams played 3 games).
+// clinched: per-team map { TeamName: 1|2|3|4|null } — non-null if no remaining
+//   scenario can move that team out of that position (points-only check, see
+//   clinchedPositions below).
 // Primary path uses the /standings response (official ordering incl. tiebreakers).
 // Fallback computes provisional tables from finished matches (points, GD, GF),
 // so we still get something even if /standings is unavailable for the comp type.
 
 import { mapTeam } from "./teamMap.js";
+
+const GAMES_PER_TEAM = 3;
+
+// A team T has clinched position i iff, given every team has remaining = 3-played
+// games left, no possible outcome can move T out of position i. We use a points-only
+// strict comparison (ignore GD tiebreakers): a team U above T cannot drop below T
+// when U.points > T.maxPoints, and a team U below T cannot catch T when
+// U.maxPoints < T.points. Strict inequality is conservative — if max==min for two
+// teams they could still swap via GD, so we don't claim clinched. Mexico's real
+// Group A case (6 pts after 2 games vs 0/0/0 below) clinches cleanly: every other
+// team's max is ≤ 3 < 6.
+//
+// rows: [{team, points, played, gf, ga}, ...] sorted top→bottom by current standings.
+// Returns: { TeamName: 1|2|3|4|null }.
+export function clinchedPositions(rows) {
+  const out = {};
+  const enriched = rows.map((r) => ({
+    ...r,
+    max: r.points + 3 * Math.max(0, GAMES_PER_TEAM - (r.played || 0)),
+  }));
+  enriched.forEach((T, i) => {
+    const above = enriched.slice(0, i);
+    const below = enriched.slice(i + 1);
+    const aboveLocked = above.every((U) => U.points > T.max);
+    const belowLocked = below.every((U) => U.max < T.points);
+    out[T.team] = aboveLocked && belowLocked ? i + 1 : null;
+  });
+  return out;
+}
+
+// Given a current order and a previous order (post-prior-matchday snapshot),
+// returns { TeamName: "up"|"down"|null }. Same position or missing snapshot → null.
+// Position uses 0-based index in the order array (index 0 = 1st, index 3 = 4th).
+export function movementVsPrev(currentOrder, prevOrder) {
+  const out = {};
+  if (!Array.isArray(currentOrder)) return out;
+  const prevIndex = new Map();
+  if (Array.isArray(prevOrder)) prevOrder.forEach((t, i) => prevIndex.set(t, i));
+  currentOrder.forEach((team, i) => {
+    if (!prevIndex.has(team)) { out[team] = null; return; }
+    const delta = prevIndex.get(team) - i;
+    out[team] = delta > 0 ? "up" : delta < 0 ? "down" : null;
+  });
+  return out;
+}
 
 export function ordersFromStandings(json) {
   const groups = {};
@@ -17,20 +65,32 @@ export function ordersFromStandings(json) {
     const letter = String(s.group).replace(/^GROUP[_\s-]?/i, "").toUpperCase();
     const rows = [...(s.table || [])].sort((a, b) => (a.position || 0) - (b.position || 0));
     const order = [];
+    const stats = [];
     let allPlayed = true;
     let anyPlayed = false;
     for (const r of rows) {
       const team = r.team || {};
       const our = mapTeam(team.name, team.tla);
-      if (our) order.push(our);
-      else unmapped.push(team.name || team.tla || "(unknown)");
+      if (our) {
+        order.push(our);
+        stats.push({
+          team: our,
+          points: r.points ?? 0,
+          played: r.playedGames ?? 0,
+          gf: r.goalsFor ?? 0,
+          ga: r.goalsAgainst ?? 0,
+        });
+      } else {
+        unmapped.push(team.name || team.tla || "(unknown)");
+      }
       const played = r.playedGames ?? 0;
       if (played < 3) allPlayed = false;
       if (played > 0) anyPlayed = true;
     }
     if (order.length === 4) {
       const status = allPlayed ? "final" : anyPlayed ? "live" : "pending";
-      groups[letter] = { order, status, source: "api" };
+      const clinched = anyPlayed ? clinchedPositions(stats) : {};
+      groups[letter] = { order, status, source: "api", clinched };
     }
   }
   return { groups, unmapped };
@@ -111,7 +171,8 @@ export function ordersFromMatches(json) {
       const allPlayed = rows.every((r) => r.played >= 3);
       const anyPlayed = rows.some((r) => r.played > 0);
       const status = allPlayed ? "final" : anyPlayed ? "live" : "pending";
-      groups[letter] = { order: rows.map((r) => r.team), status, source: "api" };
+      const clinched = anyPlayed ? clinchedPositions(rows) : {};
+      groups[letter] = { order: rows.map((r) => r.team), status, source: "api", clinched };
     }
   }
   return { groups, unmapped };
