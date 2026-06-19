@@ -138,16 +138,19 @@ function HelpPill() {
 }
 
 function HelpModal({ onClose }) {
-  // Sized to dominate the viewport: width 1100 caps it nicely on desktop,
-  // close-button is sticky at the top so it stays in reach while scrolling.
+  // Modal fills the viewport (height: calc(100vh - 24px)) and its CONTENT
+  // scrolls internally — instead of a content-height column that scrolls the
+  // outer container. That way the user reads a full screen of help at a time
+  // instead of glimpsing 1-2 sentences inside a short window.
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 8, overflowY: "auto", zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 1100, width: "100%", margin: "12px 0", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 28 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, position: "sticky", top: 0, background: "var(--bg)", paddingBottom: 6, zIndex: 1 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 1100, width: "100%", height: "calc(100vh - 24px)", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 28px 14px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
           <div style={{ fontFamily: "var(--display)", fontSize: 32, color: "var(--gold)" }}>HOW IT WORKS</div>
           <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 10 }}><X size={18} /></button>
         </div>
 
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 28px 28px" }}>
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
           <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>How points work</div>
           <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 10px", lineHeight: 1.55 }}>You earn points for each group based on how close your predicted finishing order matches the real result.</p>
@@ -212,6 +215,7 @@ function HelpModal({ onClose }) {
         <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px" }}>
           <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>TL;DR</div>
           <p style={{ color: "var(--muted)", fontSize: 15, margin: 0, lineHeight: 1.55 }}>Red and green = slot-perfect hits. White can still score partial credit. 4th never scores. Projected can change; Final is locked in.</p>
+        </div>
         </div>
 
       </div>
