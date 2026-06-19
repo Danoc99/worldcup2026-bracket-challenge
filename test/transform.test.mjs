@@ -1,6 +1,9 @@
 import fs from "fs";
 import assert from "assert";
-import { ordersFromStandings, ordersFromMatches, matchesFromFeed, clinchedPositions, movementVsPrev } from "../functions/_lib/transform.js";
+import {
+  ordersFromStandings, ordersFromMatches, matchesFromFeed,
+  clinchedPositions, clinchedPositionsHTH, buildH2H, groupRemainingMatches, movementVsPrev,
+} from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { onRequestPost as adminPost } from "../functions/api/admin.js";
@@ -497,6 +500,201 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   };
   const { groups: g2 } = ordersFromStandings(pendingFeed);
   ok("ordersFromStandings: pending group has empty clinched", g2.A?.clinched && Object.keys(g2.A.clinched).length === 0);
+}
+
+// 14) clinchedPositionsHTH — H2H-aware clinch via full W/D/L simulation.
+//     FIFA 2026 tiebreaker: Points → H2H mini-table (pts/GD/GS) → overall GD →
+//     overall GS → fair play → ranking. The simulation models pts + H2H pts only
+//     (still-tied subgroups after H2H pts are returned as ambiguous, since per-
+//     scenario GD is unknown). Conservative on ambiguity: never false-positive.
+{
+  // Mexico's reported case. After MD2:
+  //   Mexico        6 pts (W vs South Korea, W vs Czechia) — played 2
+  //   South Africa  3 pts (W vs Czechia,     L vs Mexico would be MD3...)
+  //   Czechia       3 pts (W vs South Korea, L vs South Africa)
+  //   South Korea   0 pts (L all)
+  // Remaining: Mexico v South Africa (MD3), South Korea v Czechia (MD3).
+  // Mexico's worst: lose to South Africa → stays at 6. South Africa wins → 6.
+  // Could tie at 6. H2H: Mexico already beat South Korea (not SA). The decisive
+  // MD3 match IS Mexico v South Africa, so in the tie scenario SA beat Mexico
+  // → SA wins H2H tiebreaker → Mexico is NOT clinched against SA. Correct
+  // behavior: Mexico null. (The user's intuition was based on assuming Mexico
+  // had already played all the relevant teams; the H2H sim correctly flags
+  // that the pending Mexico-SA match controls the tie.)
+  const mexAfterMD2 = [
+    { team: "Mexico",       points: 6, played: 2 },
+    { team: "South Africa", points: 3, played: 2 },
+    { team: "Czechia",      points: 3, played: 2 },
+    { team: "South Korea",  points: 0, played: 2 },
+  ];
+  const h2hPending = {
+    "Mexico|South Korea": "Mexico",
+    "Czechia|Mexico": "Mexico",
+    "Czechia|South Africa": "South Africa",
+    "Czechia|South Korea": "Czechia",
+  };
+  const remPending = [
+    { home: "Mexico", away: "South Africa" },
+    { home: "South Korea", away: "Czechia" },
+  ];
+  const cMex = clinchedPositionsHTH(mexAfterMD2, h2hPending, remPending);
+  ok("HTH: pending Mexico-SA match → Mexico not yet clinched", cMex.Mexico === null);
+  ok("HTH: pending Mexico-SA match → SA not yet clinched", cMex["South Africa"] === null);
+
+  // Now imagine Mexico already played all 3 (won all → 9 pts), and the other 3
+  // teams' Mexico games are FINISHED. The user's true intent: Mexico has played
+  // the head-to-head matches; nothing left can flip them. Sim should clinch
+  // Mexico at 1 even if SA can still reach 6.
+  const mexDone = [
+    { team: "Mexico",       points: 9, played: 3 },
+    { team: "South Africa", points: 3, played: 2 },
+    { team: "Czechia",      points: 3, played: 2 },
+    { team: "South Korea",  points: 0, played: 3 },
+  ];
+  const h2hDone = {
+    "Mexico|South Korea": "Mexico",
+    "Czechia|Mexico": "Mexico",
+    "Mexico|South Africa": "Mexico",       // Mexico beat SA — already played
+    "Czechia|South Korea": "Czechia",
+  };
+  const remDone = [{ home: "South Africa", away: "South Korea" }];  // SA could reach 6
+  const c1 = clinchedPositionsHTH(mexDone, h2hDone, remDone);
+  ok("HTH: leader fully done at 9 → 1st clinched even with sub-leader reachable", c1.Mexico === 1);
+
+  // Direct 2-team H2H scenario: T won H2H, U's max ties T's min, no 3rd team can
+  // reach that level. T must be clinched ahead of U.
+  // Mexico 6 pts (played all 3), South Korea 3 (played 2). Other teams capped low.
+  // Mexico already beat South Korea H2H. Tie at 6 would mean SK wins remaining;
+  // H2H: Mexico won → Mexico 1st.
+  const twoTeamH2H = [
+    { team: "Mexico",       points: 6, played: 3 },
+    { team: "South Korea",  points: 3, played: 2 },
+    { team: "South Africa", points: 1, played: 3 }, // max 1, can't catch
+    { team: "Czechia",      points: 1, played: 2 }, // max 4, can't reach 6
+  ];
+  const h2h2 = { "Mexico|South Korea": "Mexico" };
+  const rem2 = [{ home: "South Korea", away: "Czechia" }];
+  const c2 = clinchedPositionsHTH(twoTeamH2H, h2h2, rem2);
+  ok("HTH: 2-team H2H win → leader 1st clinched", c2.Mexico === 1);
+
+  // Inverse: U won the H2H, so even if T's points-lead looks safe-ish, T can be
+  // overtaken on the tiebreaker.
+  const h2hInv = { "Mexico|South Korea": "South Korea" };
+  const c3 = clinchedPositionsHTH(twoTeamH2H, h2hInv, rem2);
+  ok("HTH: 2-team H2H loss → leader NOT 1st clinched", c3.Mexico === null);
+
+  // Final group (no remaining), distinct points → all clinched.
+  const finalDistinct = [
+    { team: "Mexico", points: 9, played: 3 },
+    { team: "South Africa", points: 4, played: 3 },
+    { team: "Czechia", points: 3, played: 3 },
+    { team: "South Korea", points: 1, played: 3 },
+  ];
+  const c4 = clinchedPositionsHTH(finalDistinct, {}, []);
+  ok("HTH: final group, no ties → all clinched", c4.Mexico === 1 && c4["South Korea"] === 4);
+
+  // Final group with 2-team tie resolved by H2H.
+  const finalTie = [
+    { team: "Mexico", points: 9, played: 3 },
+    { team: "South Africa", points: 4, played: 3 },
+    { team: "Czechia", points: 4, played: 3 },   // tied with SA on points
+    { team: "South Korea", points: 1, played: 3 },
+  ];
+  const h2hTie = {
+    "Czechia|South Africa": "South Africa",  // SA beat Czechia → SA 2nd, Czechia 3rd
+  };
+  const c5 = clinchedPositionsHTH(finalTie, h2hTie, []);
+  ok("HTH: final 2-way tie resolved by H2H → both clinched at H2H position", c5["South Africa"] === 2 && c5.Czechia === 3);
+
+  // Final group with 3-team H2H rock-paper-scissors → mini-table all 3 pts →
+  // still tied after H2H pts → GD would decide → sim returns null for cycle teams.
+  const finalCycle = [
+    { team: "Mexico", points: 6, played: 3 },
+    { team: "South Africa", points: 6, played: 3 },
+    { team: "Czechia", points: 6, played: 3 },
+    { team: "South Korea", points: 0, played: 3 },
+  ];
+  const h2hCycle = {
+    "Mexico|South Africa": "Mexico",         // Mexico > SA
+    "Czechia|Mexico": "Czechia",             // Czechia > Mexico
+    "Czechia|South Africa": "South Africa",  // SA > Czechia (cycle)
+    "Mexico|South Korea": "Mexico",
+    "Czechia|South Korea": "Czechia",
+    "South Africa|South Korea": "South Africa",
+  };
+  const c6 = clinchedPositionsHTH(finalCycle, h2hCycle, []);
+  ok("HTH: 3-way H2H cycle → top three NOT clinched (GD would decide)", c6.Mexico === null && c6["South Africa"] === null && c6.Czechia === null);
+  ok("HTH: 3-way cycle still clinches the 4th-place outlier", c6["South Korea"] === 4);
+}
+
+// 15) buildH2H + groupRemainingMatches — fd.js feeds these into clinchedPositionsHTH.
+{
+  const feed = {
+    matches: [
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "South Korea", tla: "KOR" },
+        score: { fullTime: { home: 2, away: 0 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Czechia", tla: "CZE" }, awayTeam: { name: "South Africa", tla: "RSA" },
+        score: { fullTime: { home: 1, away: 1 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "SCHEDULED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "South Africa", tla: "RSA" } },
+      { stage: "GROUP_STAGE", group: "GROUP_B", status: "FINISHED",
+        homeTeam: { name: "Canada", tla: "CAN" }, awayTeam: { name: "Switzerland", tla: "SUI" },
+        score: { fullTime: { home: 3, away: 1 } } },
+      // FINISHED but null scores — skipped (we can't tell who won).
+      { stage: "GROUP_STAGE", group: "GROUP_B", status: "FINISHED",
+        homeTeam: { name: "Qatar", tla: "QAT" }, awayTeam: { name: "Bosnia and Herzegovina", tla: "BIH" },
+        score: { fullTime: { home: null, away: null } } },
+      // Knockout → skipped.
+      { stage: "ROUND_OF_32", status: "SCHEDULED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "Canada", tla: "CAN" } },
+    ],
+  };
+  const h2h = buildH2H(feed);
+  ok("buildH2H: winner recorded by team name", h2h["Mexico|South Korea"] === "Mexico");
+  ok("buildH2H: draw recorded as 'draw'", h2h["Czechia|South Africa"] === "draw");
+  ok("buildH2H: cross-group fine", h2h["Canada|Switzerland"] === "Canada");
+  ok("buildH2H: null-score FINISHED skipped (can't tell)", h2h["Bosnia and Herzegovina|Qatar"] === undefined);
+  ok("buildH2H: knockout match excluded", Object.keys(h2h).length === 3);
+
+  const rem = groupRemainingMatches(feed);
+  ok("groupRemaining: lists unplayed group-stage match", rem.A?.length === 1 && rem.A[0].home === "Mexico" && rem.A[0].away === "South Africa");
+  ok("groupRemaining: no remaining in B (all finished, even null-score)", rem.B === undefined);
+  ok("groupRemaining: knockout match not included", !rem.A.some((m) => m.home === "Mexico" && m.away === "Canada"));
+}
+
+// 16) Regression: ordersFromMatches' fallback path now correctly emits clinched.
+//     Before this fix, the path built rows with `pts` field but called
+//     clinchedPositions which reads `points` — so the whole fallback returned
+//     all-null clinched. Verify clinched fires on a fully-played group.
+{
+  const feed = {
+    matches: [
+      // Group A — fully played, distinct points. After:
+      //   Mexico (W,W,W) = 9, South Korea (W,W,L) = 6, Czechia (W,L,L) = 3, South Africa (L,L,L) = 0
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "South Korea", tla: "KOR" },
+        score: { fullTime: { home: 1, away: 0 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "Czechia", tla: "CZE" },
+        score: { fullTime: { home: 1, away: 0 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Mexico", tla: "MEX" }, awayTeam: { name: "South Africa", tla: "RSA" },
+        score: { fullTime: { home: 1, away: 0 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "South Korea", tla: "KOR" }, awayTeam: { name: "Czechia", tla: "CZE" },
+        score: { fullTime: { home: 1, away: 0 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "South Korea", tla: "KOR" }, awayTeam: { name: "South Africa", tla: "RSA" },
+        score: { fullTime: { home: 1, away: 0 } } },
+      { stage: "GROUP_STAGE", group: "GROUP_A", status: "FINISHED",
+        homeTeam: { name: "Czechia", tla: "CZE" }, awayTeam: { name: "South Africa", tla: "RSA" },
+        score: { fullTime: { home: 1, away: 0 } } },
+    ],
+  };
+  const { groups: g } = ordersFromMatches(feed);
+  ok("ordersFromMatches: fallback clinched (was buggy: pts vs points) now fires", g.A?.clinched?.Mexico === 1);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

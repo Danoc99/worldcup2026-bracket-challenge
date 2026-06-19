@@ -1,4 +1,7 @@
-import { ordersFromStandings, ordersFromMatches, matchesFromFeed, movementVsPrev } from "./transform.js";
+import {
+  ordersFromStandings, ordersFromMatches, matchesFromFeed,
+  movementVsPrev, clinchedPositionsHTH, buildH2H, groupRemainingMatches,
+} from "./transform.js";
 
 const TTL_MS = 10 * 60 * 1000; // refresh at most every 10 minutes
 const BASE = "https://api.football-data.org/v4/competitions/WC";
@@ -43,7 +46,14 @@ export async function getGroupOrders(env, { force = false } = {}) {
     // Per-group { minPlayed, maxPlayed } from finished matches.
     const playedByGroup = matchesJson ? playedCountsFromMatches(matchesJson) : {};
 
-    // Read snapshots, decide writes, decorate movement.
+    // H2H-aware clinch needs the already-played match winners + the unplayed
+    // fixtures, so we can enumerate W/D/L scenarios and resolve points-ties via
+    // the H2H mini-table (FIFA 2026 puts H2H ahead of overall GD).
+    const h2h = matchesJson ? buildH2H(matchesJson) : {};
+    const remainingByGroup = matchesJson ? groupRemainingMatches(matchesJson) : {};
+    const statsByGroup = parsed.statsByGroup || {};
+
+    // Read snapshots, decide writes, decorate movement + H2H-aware clinched.
     let snapshots = {};
     try { snapshots = (await env.POOL.get(SNAPSHOTS_KEY, "json")) || {}; } catch {}
     let snapshotsDirty = false;
@@ -64,7 +74,15 @@ export async function getGroupOrders(env, { force = false } = {}) {
       if (p) compareAgainst = p.maxPlayed > p.minPlayed ? p.minPlayed : p.minPlayed - 1;
       const prevOrder = compareAgainst >= 1 ? groupSnap[String(compareAgainst)] : null;
       const movement = movementVsPrev(g.order, prevOrder);
-      decorated[letter] = { ...g, movement };
+
+      // Upgrade strict clinched to H2H-aware simulation when we have the inputs.
+      // If matches feed is unavailable (transient API failure), fall through with
+      // the strict version baked in by ordersFromStandings.
+      const stats = statsByGroup[letter];
+      const remaining = remainingByGroup[letter] || [];
+      const clinched = (stats && matchesJson) ? clinchedPositionsHTH(stats, h2h, remaining) : g.clinched;
+
+      decorated[letter] = { ...g, clinched, movement };
     }
 
     if (snapshotsDirty) {
