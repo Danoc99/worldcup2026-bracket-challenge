@@ -139,8 +139,8 @@ function HelpPill() {
 
 function HelpModal({ onClose }) {
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto", zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 640, width: "100%", margin: "40px 0", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 20 }}>
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 8, overflowY: "auto", zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 760, width: "100%", margin: "16px 0", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div style={{ fontFamily: "var(--display)", fontSize: 26, color: "var(--gold)" }}>HOW IT WORKS</div>
           <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 8 }}><X size={16} /></button>
@@ -534,7 +534,11 @@ function stageName(stage) {
 }
 
 function StandingsTab({ entries, groups, meta, locked, me }) {
-  const [open, setOpen] = useState(null);
+  // Multi-open: each row toggles independently so players can be compared side-by-side.
+  const [open, setOpen] = useState(() => new Set());
+  function toggle(name) {
+    setOpen((prev) => { const next = new Set(prev); if (next.has(name)) next.delete(name); else next.add(name); return next; });
+  }
   const tally = useMemo(() => tallyPicks(entries), [entries]);
   const counted = GROUP_IDS.map((g) => groups[g]).filter(Boolean);
   const liveCount = counted.filter((r) => r.status === "live").length;
@@ -571,7 +575,7 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
         return (
           <div key={r.name} style={{ marginBottom: 10 }}>
             <Card style={{ padding: 0, border: isMe ? "1px solid var(--pitch)" : "1px solid var(--line)" }}>
-              <button className="btn" onClick={() => setOpen(open === r.name ? null : r.name)} style={{ width: "100%", background: "transparent", color: "var(--text)", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", textAlign: "left" }}>
+              <button className="btn" onClick={() => toggle(r.name)} style={{ width: "100%", background: "transparent", color: "var(--text)", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", textAlign: "left" }}>
                 <div style={{ fontFamily: "var(--display)", fontSize: 22, width: 30, color: medal ? POS_META[i].color : "var(--muted)" }}>{medal ? <Medal size={22} style={{ color: POS_META[i].color }} /> : i + 1}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{r.name} {isMe && <span style={{ color: "var(--pitch)", fontSize: 12, fontWeight: 700 }}>· you</span>}</div>
@@ -584,7 +588,7 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
                   </div>
                 )}
               </button>
-              {open === r.name && <div style={{ borderTop: "1px solid var(--line)", padding: "10px 16px 14px" }}><PlayerBreakdown entry={r} groups={groups} locked={locked} isMe={isMe} tally={tally} /></div>}
+              {open.has(r.name) && <div style={{ borderTop: "1px solid var(--line)", padding: "10px 16px 14px" }}><PlayerBreakdown entry={r} groups={groups} locked={locked} isMe={isMe} tally={tally} /></div>}
             </Card>
           </div>
         );
