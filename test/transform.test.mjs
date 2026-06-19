@@ -606,6 +606,31 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   const c5 = clinchedPositionsHTH(finalTie, h2hTie, []);
   ok("HTH: final 2-way tie resolved by H2H → both clinched at H2H position", c5["South Africa"] === 2 && c5.Czechia === 3);
 
+  // Live regression: the real Group A state on 2026-06-19, post-MD2.
+  // June 11: Mexico 2-0 SA, SK 2-1 Cze.  June 18: Mexico 1-0 SK, Cze 1-1 SA.
+  // Standings: Mex 6, SK 3, SA 1, Cze 1.  Remaining: Cze v Mex, SA v SK.
+  // Mexico has already beaten both SK and SA head-to-head; SA/Cze can't reach 6
+  // (max 4); SK can reach 6 only by winning vs SA, which doesn't affect the
+  // Mexico H2H (already played and Mexico won). Sim must clinch Mexico at 1.
+  const realGroupA = [
+    { team: "Mexico",       points: 6, played: 2 },
+    { team: "South Korea",  points: 3, played: 2 },
+    { team: "South Africa", points: 1, played: 2 },
+    { team: "Czechia",      points: 1, played: 2 },
+  ];
+  const realH2H = {
+    "Mexico|South Africa": "Mexico",          // MD1
+    "Czechia|South Korea": "South Korea",     // MD1
+    "Mexico|South Korea": "Mexico",           // MD2
+    "Czechia|South Africa": "draw",           // MD2
+  };
+  const realRem = [
+    { home: "Czechia", away: "Mexico" },      // MD3
+    { home: "South Africa", away: "South Korea" }, // MD3
+  ];
+  const cReal = clinchedPositionsHTH(realGroupA, realH2H, realRem);
+  ok("HTH: real WC Group A on 2026-06-19 → Mexico clinched 1st", cReal.Mexico === 1);
+
   // Final group with 3-team H2H rock-paper-scissors → mini-table all 3 pts →
   // still tied after H2H pts → GD would decide → sim returns null for cycle teams.
   const finalCycle = [
