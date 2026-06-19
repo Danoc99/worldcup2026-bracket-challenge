@@ -138,28 +138,30 @@ function HelpPill() {
 }
 
 function HelpModal({ onClose }) {
+  // Sized to dominate the viewport: width 1100 caps it nicely on desktop,
+  // close-button is sticky at the top so it stays in reach while scrolling.
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 8, overflowY: "auto", zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 760, width: "100%", margin: "16px 0", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontFamily: "var(--display)", fontSize: 26, color: "var(--gold)" }}>HOW IT WORKS</div>
-          <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 8 }}><X size={16} /></button>
+      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 1100, width: "100%", margin: "12px 0", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 28 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18, position: "sticky", top: 0, background: "var(--bg)", paddingBottom: 6, zIndex: 1 }}>
+          <div style={{ fontFamily: "var(--display)", fontSize: 32, color: "var(--gold)" }}>HOW IT WORKS</div>
+          <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 10 }}><X size={18} /></button>
         </div>
 
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>How points work</div>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 8px", lineHeight: 1.5 }}>You earn points for each group based on how close your predicted finishing order matches the real result.</p>
-          <ul style={{ color: "var(--muted)", fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>How points work</div>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 10px", lineHeight: 1.55 }}>You earn points for each group based on how close your predicted finishing order matches the real result.</p>
+          <ul style={{ color: "var(--muted)", fontSize: 15, margin: 0, paddingLeft: 22, lineHeight: 1.75 }}>
             <li>Exact slot match → max points: <b style={{ color: "var(--text)" }}>25</b> for 1st, <b style={{ color: "var(--text)" }}>20</b> for 2nd, <b style={{ color: "var(--text)" }}>15</b> for 3rd</li>
             <li>Off by one or two slots → partial credit (5–15 pts)</li>
             <li>Predict ANY team to finish 4th → <b style={{ color: "var(--text)" }}>0 pts</b> no matter what</li>
           </ul>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: "8px 0 0", lineHeight: 1.5 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b>, so the group stage alone is worth up to <b style={{ color: "var(--text)" }}>720</b>.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "10px 0 0", lineHeight: 1.55 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b>, so the group stage alone is worth up to <b style={{ color: "var(--text)" }}>720</b>.</p>
         </div>
 
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Example — you picked Brazil 1st</div>
-          <ul style={{ color: "var(--muted)", fontSize: 13, margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Example — you picked Brazil 1st</div>
+          <ul style={{ color: "var(--muted)", fontSize: 15, margin: 0, paddingLeft: 22, lineHeight: 1.75 }}>
             <li>Brazil finishes 1st → <b style={{ color: "var(--green)" }}>25 pts</b></li>
             <li>Brazil finishes 2nd → <b style={{ color: "var(--text)" }}>15 pts</b> (partial credit, off by one)</li>
             <li>Brazil finishes 3rd → <b style={{ color: "var(--text)" }}>5 pts</b></li>
@@ -167,49 +169,49 @@ function HelpModal({ onClose }) {
           </ul>
         </div>
 
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Projected vs. Final points</div>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 6px", lineHeight: 1.5 }}><b style={{ color: "var(--red)" }}>Projected (~12)</b> — the group is still being played. Points update as games happen.</p>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 6px", lineHeight: 1.5 }}><b style={{ color: "var(--green)" }}>Final (+15)</b> — the group has played all 12 of its matches. Points are locked in.</p>
-          <p style={{ color: "var(--muted)", fontSize: 12, margin: 0, fontStyle: "italic" }}>Your leaderboard total mixes both.</p>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Projected vs. Final points</div>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 8px", lineHeight: 1.55 }}><b style={{ color: "var(--red)" }}>Projected (~12)</b> — the group is still being played. Points update as games happen.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 8px", lineHeight: 1.55 }}><b style={{ color: "var(--green)" }}>Final (+15)</b> — the group has played all 12 of its matches. Points are locked in.</p>
+          <p style={{ color: "var(--muted)", fontSize: 14, margin: 0, fontStyle: "italic" }}>Your leaderboard total mixes both.</p>
         </div>
 
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>Color meanings on the Standings tab</div>
-          <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px" }}>Tap your own bracket to expand your per-group breakdown.</p>
-          <div style={{ display: "grid", gap: 10 }}>
-            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              <span style={{ color: "var(--red)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Red name</span>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>Color meanings on the Standings tab</div>
+          <p style={{ color: "var(--muted)", fontSize: 14, margin: "0 0 12px" }}>Tap your own bracket to expand your per-group breakdown.</p>
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
+              <span style={{ color: "var(--red)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>Red name</span>
               <span>You picked this team for this slot AND it's currently in that slot, but the group is still live. Earning projected points; can change.</span>
             </div>
-            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              <span style={{ color: "var(--green)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Green name ✓</span>
+            <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
+              <span style={{ color: "var(--green)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>Green name ✓</span>
               <span>Same as red, but either the group is officially done OR that team has mathematically clinched the slot — no remaining results can move them out.</span>
             </div>
-            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>▲ / ▼</span>
+            <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
+              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>▲ / ▼</span>
               <span>How that team moved in the real standings since the last matchday — green up, red down. Blank means no change (or no prior matchday to compare).</span>
             </div>
-            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 84, flexShrink: 0 }}>White name</span>
+            <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
+              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>White name</span>
               <span>Team isn't in the exact slot you picked. You may STILL be earning partial credit if it's one or two slots off — that just doesn't show as a color.</span>
             </div>
-            <div style={{ display: "flex", gap: 10, fontSize: 13, color: "var(--muted)", lineHeight: 1.5 }}>
-              <span style={{ color: "var(--text)", opacity: .55, fontWeight: 800, minWidth: 84, flexShrink: 0 }}>Dimmed 4th</span>
+            <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
+              <span style={{ color: "var(--text)", opacity: .55, fontWeight: 800, minWidth: 100, flexShrink: 0 }}>Dimmed 4th</span>
               <span>4th place is always worth 0 pts, so the row is faded as a reminder.</span>
             </div>
           </div>
         </div>
 
-        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", marginBottom: 10 }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>Tiebreaker <span style={{ color: "var(--muted)", fontSize: 10, fontWeight: 700, letterSpacing: 1, marginLeft: 6 }}>· TBD</span></div>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: "0 0 6px", lineHeight: 1.5 }}>If two players finish tied on total points, we'll break the tie — the exact rule is still being finalized.</p>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: 0, lineHeight: 1.5 }}><b style={{ color: "var(--text)" }}>Leading candidate:</b> most correct knockout picks, weighted by round (R32 &lt; R16 &lt; QF &lt; SF &lt; Final). Group picks are easier to get right, so the tiebreaker should reward the hardest calls.</p>
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Tiebreaker <span style={{ color: "var(--muted)", fontSize: 11, fontWeight: 700, letterSpacing: 1, marginLeft: 6 }}>· TBD</span></div>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 8px", lineHeight: 1.55 }}>If two players finish tied on total points, we'll break the tie — the exact rule is still being finalized.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: 0, lineHeight: 1.55 }}><b style={{ color: "var(--text)" }}>Leading candidate:</b> most correct knockout picks, weighted by round (R32 &lt; R16 &lt; QF &lt; SF &lt; Final). Group picks are easier to get right, so the tiebreaker should reward the hardest calls.</p>
         </div>
 
-        <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px" }}>
-          <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 4 }}>TL;DR</div>
-          <p style={{ color: "var(--muted)", fontSize: 13, margin: 0, lineHeight: 1.5 }}>Red and green = slot-perfect hits. White can still score partial credit. 4th never scores. Projected can change; Final is locked in.</p>
+        <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px" }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>TL;DR</div>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: 0, lineHeight: 1.55 }}>Red and green = slot-perfect hits. White can still score partial credit. 4th never scores. Projected can change; Final is locked in.</p>
         </div>
 
       </div>
