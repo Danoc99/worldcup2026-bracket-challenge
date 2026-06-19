@@ -28,6 +28,7 @@ export default function App() {
   const [meta, setMeta] = useState({});
   const [me, setMe] = useState(() => { try { return JSON.parse(localStorage.getItem(ME_KEY)); } catch { return null; } });
   const [tab, setTab] = useState("picks");
+  const [helpOpen, setHelpOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const locked = now >= new Date(LOCK_ISO).getTime();
 
@@ -60,7 +61,8 @@ export default function App() {
 
   return (
     <Shell>
-      <Header config={config} locked={locked} now={now} />
+      <Header config={config} locked={locked} now={now} helpOpen={helpOpen} setHelpOpen={setHelpOpen} />
+      {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
       <Tabs tab={tab} setTab={setTab} count={entries.length} />
       {tab === "picks" && <PicksTab me={me} saveMe={saveMe} entries={entries} locked={locked} reload={load} />}
       {tab === "matches" && <MatchesTab matches={matches} meta={meta} />}
@@ -100,7 +102,7 @@ function FontAndTheme() {
 function Centered({ children }) { return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", textAlign: "center" }}>{children}</div>; }
 
 /* --------------------------------- header --------------------------------- */
-function Header({ config, locked, now }) {
+function Header({ config, locked, now, helpOpen, setHelpOpen }) {
   const remain = new Date(LOCK_ISO).getTime() - now;
   const d = Math.max(0, Math.floor(remain / 86400000));
   const h = Math.max(0, Math.floor((remain % 86400000) / 3600000));
@@ -119,46 +121,34 @@ function Header({ config, locked, now }) {
             ? <><Lock size={15} style={{ color: "var(--gold)" }} /><span style={{ fontWeight: 700 }}>Picks locked</span><span style={{ color: "var(--muted)" }}>— tournament underway</span></>
             : <><Unlock size={15} style={{ color: "var(--green)" }} /><span style={{ fontWeight: 700 }}>Picks lock in {d}d {h}h {m}m</span></>}
         </div>
-        <HelpPill />
+        <HelpPill open={helpOpen} setOpen={setHelpOpen} />
       </div>
     </div>
   );
 }
 
-function HelpPill() {
-  const [show, setShow] = useState(false);
+function HelpPill({ open, setOpen }) {
   return (
-    <>
-      <button className="btn" onClick={() => setShow(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
-        <HelpCircle size={15} style={{ color: "var(--pitch)" }} /> How it works
-      </button>
-      {show && <HelpModal onClose={() => setShow(false)} />}
-    </>
+    <button className="btn" onClick={() => setOpen((o) => !o)} style={{ display: "inline-flex", alignItems: "center", gap: 8, background: open ? "var(--card2)" : "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
+      <HelpCircle size={15} style={{ color: "var(--pitch)" }} /> {open ? "Hide help" : "How it works"}
+    </button>
   );
 }
 
-function HelpModal({ onClose }) {
-  // Modal is anchored DIRECTLY to viewport edges with position:fixed + inset:12px.
-  // Earlier passes used `height: calc(100vh - 24px)` centered inside a backdrop —
-  // that broke on mobile because 100vh includes the dynamic toolbar (address bar),
-  // so the modal rendered taller than the visible area and the page bled through.
-  // Anchoring with inset bypasses the height math entirely.
-  // Also lock body scroll so the page can't slide behind the modal on any browser.
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
-  }, []);
+// Inline expandable panel — renders right under the Header as regular page
+// content. Earlier modal-based approaches kept hitting mobile viewport/100vh
+// bugs that clipped the panel and let the page bleed through. As an inline
+// section, there's no positioning math to get wrong: the user just scrolls
+// the page normally. Close X collapses; clicking "How it works" again toggles.
+function HelpPanel({ onClose }) {
   return (
-    <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", zIndex: 50 }} />
-      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ position: "fixed", inset: 12, maxWidth: 1100, marginLeft: "auto", marginRight: "auto", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", zIndex: 51 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 28px 14px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
-          <div style={{ fontFamily: "var(--display)", fontSize: 32, color: "var(--gold)" }}>HOW IT WORKS</div>
+    <div className="rise" style={{ margin: "12px 0 18px" }}>
+      <div style={{ background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, padding: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
+          <div style={{ fontFamily: "var(--display)", fontSize: 28, color: "var(--gold)" }}>HOW IT WORKS</div>
           <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 10 }}><X size={18} /></button>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "16px 28px 28px" }}>
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
           <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>How points work</div>
           <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 10px", lineHeight: 1.55 }}>You earn points for each group based on how close your predicted finishing order matches the real result.</p>
@@ -224,10 +214,8 @@ function HelpModal({ onClose }) {
           <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>TL;DR</div>
           <p style={{ color: "var(--muted)", fontSize: 15, margin: 0, lineHeight: 1.55 }}>Red and green = slot-perfect hits. White can still score partial credit. 4th never scores. Projected can change; Final is locked in.</p>
         </div>
-        </div>
-
       </div>
-    </>
+    </div>
   );
 }
 
