@@ -138,13 +138,21 @@ function HelpPill() {
 }
 
 function HelpModal({ onClose }) {
-  // Modal fills the viewport (height: calc(100vh - 24px)) and its CONTENT
-  // scrolls internally — instead of a content-height column that scrolls the
-  // outer container. That way the user reads a full screen of help at a time
-  // instead of glimpsing 1-2 sentences inside a short window.
+  // Modal is anchored DIRECTLY to viewport edges with position:fixed + inset:12px.
+  // Earlier passes used `height: calc(100vh - 24px)` centered inside a backdrop —
+  // that broke on mobile because 100vh includes the dynamic toolbar (address bar),
+  // so the modal rendered taller than the visible area and the page bled through.
+  // Anchoring with inset bypasses the height math entirely.
+  // Also lock body scroll so the page can't slide behind the modal on any browser.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 12, zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ maxWidth: 1100, width: "100%", height: "calc(100vh - 24px)", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(4,7,14,.72)", backdropFilter: "blur(4px)", zIndex: 50 }} />
+      <div onClick={(e) => e.stopPropagation()} className="rise" style={{ position: "fixed", inset: 12, maxWidth: 1100, marginLeft: "auto", marginRight: "auto", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 18, display: "flex", flexDirection: "column", overflow: "hidden", zIndex: 51 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 28px 14px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
           <div style={{ fontFamily: "var(--display)", fontSize: 32, color: "var(--gold)" }}>HOW IT WORKS</div>
           <button className="btn" onClick={onClose} style={{ background: "var(--card)", border: "1px solid var(--line)", color: "var(--text)", padding: 10 }}><X size={18} /></button>
@@ -219,7 +227,7 @@ function HelpModal({ onClose }) {
         </div>
 
       </div>
-    </div>
+    </>
   );
 }
 
