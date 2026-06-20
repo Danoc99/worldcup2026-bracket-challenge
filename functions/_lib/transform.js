@@ -11,8 +11,64 @@
 // so we still get something even if /standings is unavailable for the comp type.
 
 import { mapTeam } from "./teamMap.js";
+import { scoreGroup } from "./scoring.js";
 
 const GAMES_PER_TEAM = 3;
+
+// Rank players by total projected points across the merged group orders.
+// Standard competition ranking (1, 2, 2, 4) — tied players share the lower rank,
+// the next-distinct player skips ahead accordingly. This is the same denominator
+// the Standings tab uses when it sorts/displays players, so a snapshot taken via
+// this helper is comparable to what the user saw on the page at snapshot time.
+//
+// entries: [{ name, predictions }] — entries without a predictions object are skipped
+//          entirely (they're "no-shows" rather than "tied at 0", same convention
+//          as tallyPicks in src/data.js).
+// groups:  { A: { order, status }, ... } — same shape used by state.js. Groups
+//          with status "pending" contribute 0 (matches the StandingsTab UI: it
+//          skips pending groups when totaling).
+// Returns: [{ name, total, rank }] sorted by total desc, then name asc.
+export function rankPlayers(entries, groups) {
+  const list = Array.isArray(entries) ? entries : [];
+  const g = groups || {};
+  const rows = [];
+  for (const e of list) {
+    if (!e || !e.predictions) continue;
+    let total = 0;
+    for (const [letter, gr] of Object.entries(g)) {
+      if (!gr || gr.status === "pending") continue;
+      total += scoreGroup(e.predictions[letter], gr.order);
+    }
+    rows.push({ name: e.name, total });
+  }
+  rows.sort((a, b) => b.total - a.total || String(a.name).localeCompare(String(b.name)));
+  // Standard competition ranking: 1, 2, 2, 4. Rank = index of the first row in
+  // the tied bucket + 1; the next-distinct row jumps to the bucket's end.
+  let lastTotal = null;
+  let lastRank = 0;
+  return rows.map((r, i) => {
+    const rank = (lastTotal !== null && r.total === lastTotal) ? lastRank : i + 1;
+    lastTotal = r.total; lastRank = rank;
+    return { name: r.name, total: r.total, rank };
+  });
+}
+
+// Given two player snapshots (older first, newer second), returns
+// { name: delta } where delta = older.rank - newer.rank. Positive = moved up.
+// Players present in only one snapshot are omitted (e.g. a brand-new entry
+// post-snapshot has no prior rank to compare against — show nothing per UI spec).
+export function playerMovementBetween(prev, latest) {
+  const out = {};
+  if (!prev || !latest) return out;
+  const prevRanks = prev.ranks || {};
+  const newRanks = latest.ranks || {};
+  for (const name of Object.keys(newRanks)) {
+    if (!(name in prevRanks)) continue;
+    const delta = prevRanks[name] - newRanks[name];
+    out[name] = delta;
+  }
+  return out;
+}
 
 // Strict points-only clinch — fast, conservative, no H2H knowledge. A team U
 // above T cannot drop below T when U.points > T.maxPoints, and U below T cannot

@@ -1,6 +1,7 @@
 import {
   ordersFromStandings, ordersFromMatches, matchesFromFeed,
   movementVsPrev, clinchedPositionsHTH, buildH2H, groupRemainingMatches,
+  rankPlayers,
 } from "./transform.js";
 
 const TTL_MS = 10 * 60 * 1000; // refresh at most every 10 minutes
@@ -20,6 +21,15 @@ async function fdFetch(path, env) {
 // (max played == min played == N, all 4 teams) AND we don't yet have snapshot[N]
 // for that group. Bounded at ~24 writes over the whole group stage.
 const SNAPSHOTS_KEY = "snapshots:groups";
+
+// Player-rank snapshots — captured each time at least one per-group matchday
+// boundary fires in a refresh, regardless of how many groups crossed (one
+// write per refresh max). Cap retention at the last 2 entries because that's
+// all state.js needs to compute the "since last per-group matchday" delta.
+// Shape: [{ at, totals: { name: total }, ranks: { name: rank } }, ...]
+// (older first, newer last).
+const PLAYER_SNAPSHOTS_KEY = "snapshots:players";
+const PLAYER_SNAPSHOTS_KEEP = 2;
 
 // Returns { groups, unmapped, fetchedAt, stale, error? }.
 // Groups include {order, status, source, clinched, movement} when computable.
@@ -87,6 +97,11 @@ export async function getGroupOrders(env, { force = false } = {}) {
 
     if (snapshotsDirty) {
       try { await env.POOL.put(SNAPSHOTS_KEY, JSON.stringify(snapshots)); } catch {}
+      // Same trigger as the per-team snapshot: any group crossing a clean
+      // matchday boundary in this refresh also gets a pool-wide player-rank
+      // snapshot appended. Computed against feed-only orders (no admin
+      // overrides), so the "movement chip" reads as pure matchday effect.
+      try { await writePlayerSnapshot(env, decorated); } catch {}
     }
 
     const payload = {
@@ -126,6 +141,29 @@ function playedCountsFromMatches(json) {
     out[letter] = { minPlayed: Math.min(...counts), maxPlayed: Math.max(...counts) };
   }
   return out;
+}
+
+// Load every entry from KV and append a player-rank snapshot keyed by the
+// canonical name. Called from the post-refresh hook in getGroupOrders when at
+// least one per-group matchday boundary fired this refresh. ~24 writes across
+// the whole group stage in the worst case (one per group matchday), so this is
+// well within the tournament-time KV budget called out in CLAUDE.md.
+async function writePlayerSnapshot(env, decorated) {
+  const list = await env.POOL.list({ prefix: "entry:" });
+  const entries = [];
+  for (const k of list.keys) {
+    const e = await env.POOL.get(k.name, "json");
+    if (e) entries.push({ name: e.name, predictions: e.predictions });
+  }
+  const ranked = rankPlayers(entries, decorated);
+  const ranks = {}; const totals = {};
+  for (const r of ranked) { ranks[r.name] = r.rank; totals[r.name] = r.total; }
+  let arr = [];
+  try { arr = (await env.POOL.get(PLAYER_SNAPSHOTS_KEY, "json")) || []; } catch {}
+  if (!Array.isArray(arr)) arr = [];
+  arr.push({ at: new Date().toISOString(), totals, ranks });
+  if (arr.length > PLAYER_SNAPSHOTS_KEEP) arr = arr.slice(arr.length - PLAYER_SNAPSHOTS_KEEP);
+  await env.POOL.put(PLAYER_SNAPSHOTS_KEY, JSON.stringify(arr));
 }
 
 // Returns { matches, unmapped, fetchedAt, stale, error? }.
