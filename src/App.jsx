@@ -194,6 +194,10 @@ function HelpPanel({ onClose }) {
               <span>How that team moved in the real standings since the last matchday — green up, red down. Blank means no change (or no prior matchday to compare).</span>
             </div>
             <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
+              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>▲N / ▼N</span>
+              <span>Next to your rank, this shows how many spots you moved in the leaderboard since the last group's matchday finished. Blank means no change, or not enough matchdays played yet.</span>
+            </div>
+            <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
               <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>White name</span>
               <span>Team isn't in the exact slot you picked. You may STILL be earning partial credit if it's one or two slots off — that just doesn't show as a color.</span>
             </div>
@@ -579,6 +583,7 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
             <Card style={{ padding: 0, border: isMe ? "1px solid var(--pitch)" : "1px solid var(--line)" }}>
               <button className="btn" onClick={() => toggle(r.name)} style={{ width: "100%", background: "transparent", color: "var(--text)", display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", textAlign: "left" }}>
                 <div style={{ fontFamily: "var(--display)", fontSize: 22, width: 30, color: medal ? POS_META[i].color : "var(--muted)" }}>{medal ? <Medal size={22} style={{ color: POS_META[i].color }} /> : i + 1}</div>
+                <PlayerMovementChip delta={meta?.playerMovement?.[r.name]} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16 }}>{r.name} {isMe && <span style={{ color: "var(--pitch)", fontSize: 12, fontWeight: 700 }}>· you</span>}</div>
                   {!anyResults && <div style={{ color: "var(--muted)", fontSize: 12 }}>bracket submitted</div>}
@@ -596,6 +601,20 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
         );
       })}
     </div>
+  );
+}
+
+// Small ▲N / ▼N chip rendered next to the rank number in StandingsTab.
+// `delta` is meta.playerMovement[name]: positive = moved up, negative = down,
+// 0 or undefined = nothing to show (new entry post-snapshot also lands here).
+function PlayerMovementChip({ delta }) {
+  if (!Number.isFinite(delta) || delta === 0) return <span style={{ width: 26, flexShrink: 0 }} />;
+  const up = delta > 0;
+  const Icon = up ? ChevronUp : ChevronDown;
+  return (
+    <span style={{ width: 26, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "flex-start", gap: 1, fontSize: 12, fontWeight: 800, color: up ? "var(--green)" : "var(--red)" }}>
+      <Icon size={13} /> {Math.abs(delta)}
+    </span>
   );
 }
 

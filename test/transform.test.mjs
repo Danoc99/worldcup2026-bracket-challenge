@@ -3,6 +3,7 @@ import assert from "assert";
 import {
   ordersFromStandings, ordersFromMatches, matchesFromFeed,
   clinchedPositions, clinchedPositionsHTH, buildH2H, groupRemainingMatches, movementVsPrev,
+  rankPlayers, playerMovementBetween,
 } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
@@ -720,6 +721,137 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   };
   const { groups: g } = ordersFromMatches(feed);
   ok("ordersFromMatches: fallback clinched (was buggy: pts vs points) now fires", g.A?.clinched?.Mexico === 1);
+}
+
+// 14) rankPlayers — pool-wide ranking used for the player-movement chip.
+//     Standard competition ranking (1, 2, 2, 4). Skips pending groups (no
+//     points yet) and entries without a predictions object.
+{
+  // Single group, status "final". Two distinct totals, no ties.
+  const groupsA = {
+    A: { order: ["Mexico", "South Korea", "South Africa", "Czechia"], status: "final" },
+  };
+  // alice picks 1st correctly (25), bob mispicks 1st as Czechia (0) — but gets
+  // 2nd→1st-slot guess Mexico (15). Use scoreGroup matrix:
+  //   actual 1st Mexico → pred index gives col[0]; if Mexico is at pred index 0, 25.
+  const alice = { name: "alice", predictions: { A: ["Mexico", "South Korea", "South Africa", "Czechia"] } };
+  const bob   = { name: "bob",   predictions: { A: ["Czechia", "Mexico", "South Africa", "South Korea"] } };
+  const ranked = rankPlayers([alice, bob], groupsA);
+  ok("rankPlayers: alice ranks 1st", ranked[0].name === "alice" && ranked[0].rank === 1);
+  ok("rankPlayers: bob ranks 2nd",   ranked[1].name === "bob" && ranked[1].rank === 2);
+  ok("rankPlayers: alice scores 25+20+15+0 = 60", ranked[0].total === 60);
+}
+{
+  // Tied totals → standard competition ranking 1, 2, 2, 4.
+  const groupsA = {
+    A: { order: ["Mexico", "South Korea", "South Africa", "Czechia"], status: "final" },
+  };
+  const perfect = ["Mexico", "South Korea", "South Africa", "Czechia"];
+  const a = { name: "a", predictions: { A: perfect } };       // 60 pts
+  const b = { name: "b", predictions: { A: perfect } };       // 60 pts (tied with a)
+  const c = { name: "c", predictions: { A: perfect } };       // 60 pts (tied)
+  const d = { name: "d", predictions: { A: ["Czechia", "South Africa", "South Korea", "Mexico"] } }; // 0+5+5+0 = 10
+  const ranked = rankPlayers([a, b, c, d], groupsA);
+  ok("rankPlayers: ties share lower rank (a=1)", ranked[0].rank === 1);
+  ok("rankPlayers: ties share lower rank (b=1)", ranked[1].rank === 1);
+  ok("rankPlayers: ties share lower rank (c=1)", ranked[2].rank === 1);
+  ok("rankPlayers: next-distinct skips to 4 (d=4)", ranked[3].rank === 4 && ranked[3].name === "d");
+}
+{
+  // Pending groups contribute 0 toward total (same as the UI does).
+  const groupsMixed = {
+    A: { order: ["Mexico", "South Korea", "South Africa", "Czechia"], status: "pending" },
+    B: { order: ["Canada", "Switzerland", "Qatar", "Bosnia and Herzegovina"], status: "final" },
+  };
+  const e = { name: "e", predictions: {
+    A: ["Mexico", "South Korea", "South Africa", "Czechia"],
+    B: ["Canada", "Switzerland", "Qatar", "Bosnia and Herzegovina"],
+  } };
+  const ranked = rankPlayers([e], groupsMixed);
+  ok("rankPlayers: pending group contributes 0", ranked[0].total === 60);
+}
+{
+  // Entries without predictions are excluded (matches tallyPicks convention).
+  const groupsA = {
+    A: { order: ["Mexico", "South Korea", "South Africa", "Czechia"], status: "final" },
+  };
+  const f = { name: "f" }; // no predictions
+  const g = { name: "g", predictions: { A: ["Mexico", "South Korea", "South Africa", "Czechia"] } };
+  const ranked = rankPlayers([f, g], groupsA);
+  ok("rankPlayers: no-predictions entries excluded", ranked.length === 1 && ranked[0].name === "g");
+}
+
+// 15) playerMovementBetween — pure-function pair delta from two snapshots.
+{
+  const prev = { ranks: { alice: 1, bob: 2, carol: 3 } };
+  const latest = { ranks: { alice: 3, bob: 1, carol: 2 } };
+  const m = playerMovementBetween(prev, latest);
+  ok("movement: alice dropped 2 (1→3)", m.alice === -2);
+  ok("movement: bob climbed 1 (2→1)", m.bob === 1);
+  ok("movement: carol climbed 1 (3→2)", m.carol === 1);
+}
+{
+  // Players only in latest (post-snapshot entries) are omitted — UI shows nothing.
+  const prev = { ranks: { alice: 1 } };
+  const latest = { ranks: { alice: 1, newbie: 2 } };
+  const m = playerMovementBetween(prev, latest);
+  ok("movement: new-only player omitted", !("newbie" in m));
+  ok("movement: present-in-both player included", m.alice === 0);
+}
+{
+  // Null/missing snapshots → empty map.
+  ok("movement: null prev → empty", Object.keys(playerMovementBetween(null, { ranks: { a: 1 } })).length === 0);
+  ok("movement: null latest → empty", Object.keys(playerMovementBetween({ ranks: { a: 1 } }, null)).length === 0);
+}
+
+// 16) state.js — meta.playerMovement is computed from snapshots:players when
+//     ≥ 2 snapshots exist; absent/single-snapshot returns an empty map.
+//     (Reuses the makeStatePool pattern from the manualMatchScores tests above.)
+{
+  const now = Date.now();
+  function makeStatePool(seed = {}) {
+    const kv = {
+      config: { poolName: "p", adminHash: "x", createdAt: 0 },
+      "cache:standings": { groups: {}, unmapped: [], fetchedAt: now },
+      "cache:matches": { matches: [], unmapped: [], fetchedAt: now },
+      ...seed,
+    };
+    return {
+      get: async (k, t) => { const v = kv[k] ?? null; return t === "json" || v == null ? v : JSON.stringify(v); },
+      put: async (k, v) => { kv[k] = JSON.parse(v); },
+      delete: async (k) => { delete kv[k]; },
+      list: async () => ({ keys: [] }),
+    };
+  }
+  async function callState(POOL) {
+    const res = await stateGet({ env: { POOL } });
+    return await res.json();
+  }
+
+  // No snapshots → empty playerMovement.
+  {
+    const s = await callState(makeStatePool());
+    ok("state: no snapshots → playerMovement is {}", JSON.stringify(s.meta.playerMovement) === "{}");
+  }
+  // Single snapshot → still empty (need 2 to compute a delta).
+  {
+    const s = await callState(makeStatePool({
+      "snapshots:players": [{ at: "2026-06-12T00:00:00Z", ranks: { alice: 1, bob: 2 }, totals: {} }],
+    }));
+    ok("state: single snapshot → playerMovement is {}", JSON.stringify(s.meta.playerMovement) === "{}");
+  }
+  // Two snapshots → delta computed against the *last two* (older then newer).
+  {
+    const s = await callState(makeStatePool({
+      "snapshots:players": [
+        { at: "2026-06-12T00:00:00Z", ranks: { alice: 1, bob: 2, carol: 3 }, totals: {} },
+        { at: "2026-06-13T00:00:00Z", ranks: { alice: 3, bob: 1, carol: 2 }, totals: {} },
+      ],
+    }));
+    ok("state: 2 snapshots → alice -2",  s.meta.playerMovement.alice === -2);
+    ok("state: 2 snapshots → bob +1",    s.meta.playerMovement.bob === 1);
+    ok("state: 2 snapshots → carol +1",  s.meta.playerMovement.carol === 1);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
