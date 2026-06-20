@@ -9,6 +9,7 @@ import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { onRequestPost as adminPost } from "../functions/api/admin.js";
 import { onRequestGet as stateGet } from "../functions/api/state.js";
+import { writePlayerSnapshot } from "../functions/_lib/fd.js";
 import { LOCK_ISO, hashStr } from "../functions/_lib/util.js";
 import { tallyPicks } from "../src/data.js";
 
@@ -851,6 +852,66 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
     ok("state: 2 snapshots → alice -2",  s.meta.playerMovement.alice === -2);
     ok("state: 2 snapshots → bob +1",    s.meta.playerMovement.bob === 1);
     ok("state: 2 snapshots → carol +1",  s.meta.playerMovement.carol === 1);
+  }
+}
+
+// 17) writePlayerSnapshot — the helper used by fd.js's post-refresh hook.
+//     Loads entries from POOL.list/get, ranks them against `decorated`,
+//     appends to snapshots:players, and caps retention at 2.
+{
+  function makeKvPool(seed = {}) {
+    const kv = { ...seed };
+    return {
+      _kv: kv,
+      get: async (k, t) => { const v = kv[k] ?? null; return t === "json" || v == null ? v : JSON.stringify(v); },
+      put: async (k, v) => { kv[k] = JSON.parse(v); },
+      list: async ({ prefix }) => ({
+        keys: Object.keys(kv).filter((k) => k.startsWith(prefix)).map((name) => ({ name })),
+      }),
+    };
+  }
+  const decoratedFinal = {
+    A: { order: ["Mexico", "South Korea", "South Africa", "Czechia"], status: "final" },
+  };
+  const perfect = ["Mexico", "South Korea", "South Africa", "Czechia"];
+  const seedEntries = {
+    "entry:alice": { name: "alice", predictions: { A: perfect } }, // 60
+    "entry:bob":   { name: "bob",   predictions: { A: ["Czechia", "South Africa", "South Korea", "Mexico"] } }, // 10
+  };
+
+  // First call: bootstrap — snapshots:players starts empty, ends with one entry.
+  {
+    const POOL = makeKvPool({ ...seedEntries });
+    await writePlayerSnapshot({ POOL }, decoratedFinal);
+    const arr = POOL._kv["snapshots:players"];
+    ok("writePlayerSnapshot: bootstrap writes 1 entry", Array.isArray(arr) && arr.length === 1);
+    ok("writePlayerSnapshot: alice ranked 1", arr[0].ranks.alice === 1);
+    ok("writePlayerSnapshot: bob ranked 2",   arr[0].ranks.bob === 2);
+    ok("writePlayerSnapshot: totals captured", arr[0].totals.alice === 60 && arr[0].totals.bob === 10);
+  }
+
+  // Append + cap: third write must drop the oldest, keep the last 2.
+  {
+    const POOL = makeKvPool({
+      ...seedEntries,
+      "snapshots:players": [{ at: "old", ranks: { alice: 2, bob: 1 }, totals: {} }],
+    });
+    await writePlayerSnapshot({ POOL }, decoratedFinal);
+    let arr = POOL._kv["snapshots:players"];
+    ok("writePlayerSnapshot: second write → length 2", arr.length === 2);
+    await writePlayerSnapshot({ POOL }, decoratedFinal);
+    arr = POOL._kv["snapshots:players"];
+    ok("writePlayerSnapshot: third write capped at 2", arr.length === 2);
+    ok("writePlayerSnapshot: oldest dropped", arr[0].at !== "old");
+  }
+
+  // No entries → still writes a snapshot (empty ranks/totals); harmless.
+  {
+    const POOL = makeKvPool();
+    await writePlayerSnapshot({ POOL }, decoratedFinal);
+    const arr = POOL._kv["snapshots:players"];
+    ok("writePlayerSnapshot: zero entries still writes", arr.length === 1);
+    ok("writePlayerSnapshot: zero entries → empty ranks", Object.keys(arr[0].ranks).length === 0);
   }
 }
 

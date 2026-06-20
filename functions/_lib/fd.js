@@ -102,6 +102,21 @@ export async function getGroupOrders(env, { force = false } = {}) {
       // snapshot appended. Computed against feed-only orders (no admin
       // overrides), so the "movement chip" reads as pure matchday effect.
       try { await writePlayerSnapshot(env, decorated); } catch {}
+    } else {
+      // Bootstrap: PR #30 shipped mid-tournament, after groups A–D had already
+      // crossed MD2. Those boundaries were recorded in snapshots:groups but
+      // (obviously) no player snapshot was written at the time, so the regular
+      // trigger above wouldn't fire again until the *next* new boundary —
+      // leaving the chip blank through a whole upcoming matchday. If
+      // snapshots:players is empty and the tournament is underway, write one
+      // initial player snapshot so the very next per-group MD boundary
+      // produces a usable delta.
+      try {
+        const existing = await env.POOL.get(PLAYER_SNAPSHOTS_KEY, "json");
+        const empty = !Array.isArray(existing) || existing.length === 0;
+        const tournamentLive = Object.values(decorated).some((g) => g.status === "live" || g.status === "final");
+        if (empty && tournamentLive) await writePlayerSnapshot(env, decorated);
+      } catch {}
     }
 
     const payload = {
@@ -148,7 +163,7 @@ function playedCountsFromMatches(json) {
 // least one per-group matchday boundary fired this refresh. ~24 writes across
 // the whole group stage in the worst case (one per group matchday), so this is
 // well within the tournament-time KV budget called out in CLAUDE.md.
-async function writePlayerSnapshot(env, decorated) {
+export async function writePlayerSnapshot(env, decorated) {
   const list = await env.POOL.list({ prefix: "entry:" });
   const entries = [];
   for (const k of list.keys) {
