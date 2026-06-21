@@ -194,8 +194,8 @@ function HelpPanel({ onClose }) {
               <span>How that team moved in the real standings since the last matchday — green up, red down. Blank means no change (or no prior matchday to compare).</span>
             </div>
             <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
-              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>▲N / ▼N</span>
-              <span>Next to your rank, this shows how many spots you moved in the leaderboard since the last group's matchday finished. Blank means no change, or not enough matchdays played yet.</span>
+              <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>▲N / ▼N / —</span>
+              <span>Next to your rank, this shows how many spots you moved in the leaderboard since the last group's matchday finished. A gray "—" means you held your spot (or there isn't enough matchday data yet to compare).</span>
             </div>
             <div style={{ display: "flex", gap: 12, fontSize: 15, color: "var(--muted)", lineHeight: 1.55 }}>
               <span style={{ color: "var(--text)", fontWeight: 800, minWidth: 100, flexShrink: 0 }}>White name</span>
@@ -604,11 +604,18 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
   );
 }
 
-// Small ▲N / ▼N chip rendered next to the rank number in StandingsTab.
+// Small ▲N / ▼N / — chip rendered next to the rank number in StandingsTab.
 // `delta` is meta.playerMovement[name]: positive = moved up, negative = down,
-// 0 or undefined = nothing to show (new entry post-snapshot also lands here).
+// 0 = held position, undefined = no movement data yet (new entry, or <2 snapshots).
+// Last two render as a muted "—" so every row always shows a tracker slot.
 function PlayerMovementChip({ delta }) {
-  if (!Number.isFinite(delta) || delta === 0) return <span style={{ width: 26, flexShrink: 0 }} />;
+  if (!Number.isFinite(delta) || delta === 0) {
+    return (
+      <span style={{ width: 26, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "flex-start", fontSize: 14, fontWeight: 800, color: "var(--muted)" }}>
+        —
+      </span>
+    );
+  }
   const up = delta > 0;
   const Icon = up ? ChevronUp : ChevronDown;
   return (
