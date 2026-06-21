@@ -1,5 +1,7 @@
 # World Cup 2026 Bracket Challenge
 
+**Live site:** [dcoworldcup.xyz](https://dcoworldcup.xyz)
+
 A production MVP for running a private **World Cup 2026 group-stage bracket pool** with friends, family, classmates, coworkers, or a small community.
 
 Users submit their predicted group standings, the app stores their bracket, pulls live standings data, calculates scores, and displays a leaderboard as the tournament progresses.
@@ -11,17 +13,22 @@ This app lets a group of people compete on World Cup 2026 predictions without us
 Users can:
 
 - Enter their name and create a bracket
-- Predict the final order of teams in each World Cup group
+- Predict the final order of teams in each World Cup group (drag-and-drop or keyboard)
 - Save their picks with a simple PIN
 - Return later and view their saved bracket
-- View current standings and leaderboard results
+- View current standings and leaderboard results with live projected points
 - See scoring based on how accurate their predictions are
+- Browse the full match schedule in their local-friendly EST timezone
+- See how their picks compare to the rest of the pool (contrarian vs consensus)
+- Track how many leaderboard spots they moved after each matchday
 
 Admins can:
 
 - Set up the pool
 - Use an admin password to manage results
 - Manually override group standings if live data is unavailable or incorrect
+- Override individual match scores when the feed publishes a finished match without a final score
+- Delete an entry from the pool if needed
 - Keep the app running even if the external football data feed has issues
 
 The app is already deployed as a working production MVP on Cloudflare Pages.
@@ -30,11 +37,16 @@ The app is already deployed as a working production MVP on Cloudflare Pages.
 
 - World Cup 2026 group-stage bracket predictions
 - Persistent user entries using Cloudflare KV
-- Live standings from football-data.org
-- Cached standings for better reliability
-- Stale-data fallback if the live API fails
-- Admin manual override system
-- Leaderboard scoring
+- Live standings from football-data.org with cached + stale-fallback resilience
+- Admin manual override system (group results, per-match scores, single-entry delete)
+- Leaderboard scoring with live projected points pre-tournament-final
+- Drag-and-drop pick reordering (mouse, touch, or full keyboard support)
+- Inline "How it works" help panel — scoring rules, color legend, examples
+- Full match schedule grouped by EST date with `FT` / `TODAY` badges
+- Mathematically-clinched ✓ indicator per team using FIFA 2026 head-to-head tiebreakers
+- Real-time movement indicators: team ▲/▼ on Standings and player rank ▲N / ▼N / — chip on the leaderboard, updated after each matchday boundary
+- Contrarian / consensus view — `CONTRARIAN` badge on Picks tab, `POOL 1ST` line on Standings
+- Pre-tournament placeholder state ("no projections yet" banner before kickoff)
 - Mobile-friendly React UI
 - Serverless backend using Cloudflare Pages Functions
 - Production health check endpoint
@@ -83,15 +95,16 @@ If the live data feed fails, the app can fall back to the most recent cached sta
 .
 ├── functions/
 │   ├── api/
-│   │   ├── admin.js       # Admin login and manual group result overrides
-│   │   ├── entry.js       # Create/update user bracket entries
+│   │   ├── admin.js       # Admin login, manual overrides, entry delete, match-score overrides
+│   │   ├── entry.js       # Create/update user bracket entries (lock-aware)
 │   │   ├── health.js      # Production health check endpoint
 │   │   ├── setup.js       # One-time pool setup endpoint
 │   │   └── state.js       # Main app state endpoint
 │   └── _lib/
 │       ├── fd.js          # football-data.org fetch, cache, and fallback logic
+│       ├── scoring.js     # Server-side score matrix mirror of src/data.js
 │       ├── teamMap.js     # Maps API team names to app team names
-│       ├── transform.js   # Converts live data into group standings
+│       ├── transform.js   # Converts live data into group standings, ranks, clinch, movement
 │       └── util.js        # Shared helpers
 ├── src/
 │   ├── App.jsx            # Main React application
@@ -101,6 +114,8 @@ If the live data feed fails, the app can fall back to the most recent cached sta
 ├── test/
 │   ├── fixtures/          # Test fixture data
 │   └── transform.test.mjs # Transform and scoring tests
+├── docs/
+│   └── knockout-plan.md   # Phase 2 plan for the knockout bracket
 ├── index.html             # Vite HTML entry
 ├── vite.config.js         # Vite configuration
 ├── wrangler.toml          # Cloudflare Pages/KV configuration
@@ -125,10 +140,14 @@ The app stores production data in a KV namespace bound as `POOL`.
 Important keys include:
 
 ```text
-config
-manualResults
-cache:standings
-entry:<user_slug>
+config                # pool name, admin hash, created-at
+entry:<user_slug>     # one per user — name, pin, predictions, updated-at
+manualResults         # admin overrides of group standings (global)
+manualMatchScores     # admin overrides of per-match scores, keyed by feed match id
+cache:standings       # cached football-data /standings response
+cache:matches         # cached football-data /matches response
+snapshots:groups      # per-group matchday-boundary snapshots for ▲/▼ team movement
+snapshots:players     # last two leaderboard snapshots for ▲N/▼N/— player chip
 ```
 
 ## Environment variables and secrets
@@ -242,10 +261,8 @@ Important production notes:
 ### Immediate fixes
 
 - Confirm no secrets are committed
-- Review and fix entry lock behavior before kickoff
 - Add stricter backend validation for submitted group predictions
 - Improve frontend error messages if `/api/state` fails
-- Add tests for locked-entry behavior
 
 ### MVP improvements
 
@@ -257,13 +274,11 @@ Important production notes:
 
 ### Future features
 
-- Knockout bracket predictions
+- **Phase 2 — Knockout bracket predictions** (R32 → Final). Full plan in [`docs/knockout-plan.md`](docs/knockout-plan.md); opens after FIFA publishes the R32 bracket on 2026-06-27.
 - Invite-only pool access
 - Shareable leaderboard screenshots
 - User edit history
 - Admin backup/restore tools
-- Mobile drag-and-drop for team ordering
-- Public landing page with pool rules and scoring explanation
 
 ## License
 
