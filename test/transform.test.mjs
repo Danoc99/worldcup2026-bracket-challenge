@@ -725,8 +725,9 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
 }
 
 // 14) rankPlayers — pool-wide ranking used for the player-movement chip.
-//     Standard competition ranking (1, 2, 2, 4). Skips pending groups (no
-//     points yet) and entries without a predictions object.
+//     Positional ranking (1, 2, 3, 4) matching the StandingsTab display index;
+//     ties broken alphabetically by name. Skips pending groups (no points yet)
+//     and entries without a predictions object.
 {
   // Single group, status "final". Two distinct totals, no ties.
   const groupsA = {
@@ -743,7 +744,9 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   ok("rankPlayers: alice scores 25+20+15+0 = 60", ranked[0].total === 60);
 }
 {
-  // Tied totals → standard competition ranking 1, 2, 2, 4.
+  // Tied totals → positional ranks (1, 2, 3, 4). Ties resolved alphabetically
+  // by name so snapshot ranks line up with what StandingsTab shows on screen
+  // (the chip's "moved up/down N spots" should match the displayed positions).
   const groupsA = {
     A: { order: ["Mexico", "South Korea", "South Africa", "Czechia"], status: "final" },
   };
@@ -753,10 +756,10 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   const c = { name: "c", predictions: { A: perfect } };       // 60 pts (tied)
   const d = { name: "d", predictions: { A: ["Czechia", "South Africa", "South Korea", "Mexico"] } }; // 0+5+5+0 = 10
   const ranked = rankPlayers([a, b, c, d], groupsA);
-  ok("rankPlayers: ties share lower rank (a=1)", ranked[0].rank === 1);
-  ok("rankPlayers: ties share lower rank (b=1)", ranked[1].rank === 1);
-  ok("rankPlayers: ties share lower rank (c=1)", ranked[2].rank === 1);
-  ok("rankPlayers: next-distinct skips to 4 (d=4)", ranked[3].rank === 4 && ranked[3].name === "d");
+  ok("rankPlayers: positional rank — a=1", ranked[0].rank === 1 && ranked[0].name === "a");
+  ok("rankPlayers: tied row gets next index — b=2", ranked[1].rank === 2 && ranked[1].name === "b");
+  ok("rankPlayers: tied row gets next index — c=3", ranked[2].rank === 3 && ranked[2].name === "c");
+  ok("rankPlayers: distinct lower total — d=4", ranked[3].rank === 4 && ranked[3].name === "d");
 }
 {
   // Pending groups contribute 0 toward total (same as the UI does).

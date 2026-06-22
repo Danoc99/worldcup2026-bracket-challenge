@@ -16,10 +16,11 @@ import { scoreGroup } from "./scoring.js";
 const GAMES_PER_TEAM = 3;
 
 // Rank players by total projected points across the merged group orders.
-// Standard competition ranking (1, 2, 2, 4) — tied players share the lower rank,
-// the next-distinct player skips ahead accordingly. This is the same denominator
-// the Standings tab uses when it sorts/displays players, so a snapshot taken via
-// this helper is comparable to what the user saw on the page at snapshot time.
+// Positional ranking: rank = sorted index + 1 (1, 2, 3, 4 — no skips on ties).
+// Ties on total are broken alphabetically by name, matching the StandingsTab
+// UI's sort (`b.total - a.total || a.name.localeCompare(b.name)`). Keeping
+// snapshot ranks aligned with the position numbers the user actually sees is
+// what the movement chip's "moved up/down N spots" delta is measured against.
 //
 // entries: [{ name, predictions }] — entries without a predictions object are skipped
 //          entirely (they're "no-shows" rather than "tied at 0", same convention
@@ -42,15 +43,7 @@ export function rankPlayers(entries, groups) {
     rows.push({ name: e.name, total });
   }
   rows.sort((a, b) => b.total - a.total || String(a.name).localeCompare(String(b.name)));
-  // Standard competition ranking: 1, 2, 2, 4. Rank = index of the first row in
-  // the tied bucket + 1; the next-distinct row jumps to the bucket's end.
-  let lastTotal = null;
-  let lastRank = 0;
-  return rows.map((r, i) => {
-    const rank = (lastTotal !== null && r.total === lastTotal) ? lastRank : i + 1;
-    lastTotal = r.total; lastRank = rank;
-    return { name: r.name, total: r.total, rank };
-  });
+  return rows.map((r, i) => ({ name: r.name, total: r.total, rank: i + 1 }));
 }
 
 // Given two player snapshots (older first, newer second), returns
