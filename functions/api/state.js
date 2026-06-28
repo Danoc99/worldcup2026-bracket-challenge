@@ -66,20 +66,39 @@ export async function onRequestGet({ env }) {
   // Merge feed results with manual knockout overrides (admin always wins).
   const feedResults = knockoutFeed.results || {};
   const manualKnockout = manual.knockout || {};
-  const knockoutResults = { ...feedResults, ...manualKnockout };
+
+  // Re-map R32 feed results to admin bracket slots by matching team pairs.
+  // The feed assigns R32_1…R32_16 chronologically (kickoff order), but the
+  // admin assigns them visually (ESPN bracket order). Matching by slot ID
+  // would attach the wrong result to the wrong match — e.g. today's first
+  // kickoff (Canada wins) landing on whatever admin set as R32_1 (Germany).
+  const remappedFeedResults = {};
+  for (const [feedId, feedRes] of Object.entries(feedResults)) {
+    if (!feedId.startsWith("R32_")) {
+      remappedFeedResults[feedId] = feedRes; // R16+ pass through unchanged
+      continue;
+    }
+    const feedTeams = [feedRes.home, feedRes.away].filter(Boolean);
+    let matched = false;
+    if (feedTeams.length === 2) {
+      for (const [adminId, adminMatch] of Object.entries(knockoutBracket)) {
+        if (!adminId.startsWith("R32_")) continue;
+        if (feedTeams.includes(adminMatch.home) && feedTeams.includes(adminMatch.away)) {
+          remappedFeedResults[adminId] = feedRes;
+          matched = true;
+          break;
+        }
+      }
+    }
+    if (!matched) remappedFeedResults[feedId] = feedRes; // no admin match found, keep as-is
+  }
+  const knockoutResults = { ...remappedFeedResults, ...manualKnockout };
 
   // Merge admin-entered R32 matchups with feed-detected matchups (admin wins).
-  // Feed may already have the matchups; admin can supplement/override.
   const bracket = {};
-  for (const [id, feedEntry] of Object.entries(feedResults)) {
-    // Only carry R32 home/away from feed — later rounds derive from results.
-    if (id.startsWith("R32_")) {
-      bracket[id] = { home: feedEntry.home, away: feedEntry.away, source: "api" };
-    }
-  }
   for (const [id, adminEntry] of Object.entries(knockoutBracket)) {
     if (id === "updatedAt") continue;
-    bracket[id] = adminEntry; // admin wins
+    bracket[id] = adminEntry;
   }
   // Attach winner/status to every match from the merged results.
   for (const [id, res] of Object.entries(knockoutResults)) {
