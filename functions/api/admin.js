@@ -28,6 +28,48 @@ export async function onRequestPost({ request, env }) {
     return json({ ok: true, deleted: s });
   }
 
+  // Set or clear an R32 matchup in knockoutBracket.
+  // body: { matchId: "R32_1", home: "France", away: "Brazil" }
+  // Setting home/away to "" or null clears that matchup (back to TBD).
+  if (body.action === "setBracketMatch") {
+    const id = body.matchId || "";
+    if (!/^R32_\d+$/.test(id)) return json({ error: "matchId must be R32_1 through R32_16." }, 400);
+    const home = (body.home || "").trim() || null;
+    const away = (body.away || "").trim() || null;
+    let bracket = {};
+    try { bracket = (await POOL.get("knockoutBracket", "json")) || {}; } catch {}
+    if (!home && !away) {
+      delete bracket[id];
+    } else {
+      bracket[id] = { home, away, source: "admin" };
+    }
+    bracket.updatedAt = Date.now();
+    await POOL.put("knockoutBracket", JSON.stringify(bracket));
+    return json({ ok: true });
+  }
+
+  // Set or clear a knockout match result override.
+  // body: { matchId: "R32_1", winner: "France", status: "final" }
+  // winner null/"" clears the override for that match.
+  if (body.action === "setKnockoutResult") {
+    const id = body.matchId || "";
+    if (!id) return json({ error: "Missing matchId." }, 400);
+    const winner = (body.winner || "").trim() || null;
+    const status = body.status || "final";
+    if (winner && !["live","final"].includes(status)) return json({ error: "status must be live or final." }, 400);
+    let manual = { groups: {} };
+    try { manual = (await POOL.get("manualResults", "json")) || { groups: {} }; } catch {}
+    if (!manual.knockout) manual.knockout = {};
+    if (!winner) {
+      delete manual.knockout[id];
+    } else {
+      manual.knockout[id] = { winner, status };
+    }
+    manual.updatedAt = Date.now();
+    await POOL.put("manualResults", JSON.stringify(manual));
+    return json({ ok: true });
+  }
+
   // Set or clear an admin override for a single match's final score, keyed by
   // football-data match id. Safeguard for the case where the feed flips a match
   // to FINISHED before populating score.fullTime.{home,away}. home/away null or

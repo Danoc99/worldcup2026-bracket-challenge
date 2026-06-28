@@ -1,5 +1,5 @@
 import {
-  ordersFromStandings, ordersFromMatches, matchesFromFeed,
+  ordersFromStandings, ordersFromMatches, matchesFromFeed, bracketFromFeed,
   movementVsPrev, clinchedPositionsHTH, buildH2H, groupRemainingMatches,
   rankPlayers,
 } from "./transform.js";
@@ -179,6 +179,25 @@ export async function writePlayerSnapshot(env, decorated) {
   arr.push({ at: new Date().toISOString(), totals, ranks });
   if (arr.length > PLAYER_SNAPSHOTS_KEEP) arr = arr.slice(arr.length - PLAYER_SNAPSHOTS_KEEP);
   await env.POOL.put(PLAYER_SNAPSHOTS_KEY, JSON.stringify(arr));
+}
+
+// Returns { results, unmapped, fetchedAt, stale, error? }.
+// results: { R32_1: { home, away, winner, status }, ... } — only confirmed matchups.
+// Same cache-and-serve-stale pattern as the other fetchers, against cache:knockout.
+export async function getKnockoutData(env, { force = false } = {}) {
+  let cache = null;
+  try { const raw = await env.POOL.get("cache:knockout"); cache = raw ? JSON.parse(raw) : null; } catch {}
+  if (!force && cache && Date.now() - cache.fetchedAt < TTL_MS) return { ...cache, stale: false };
+
+  try {
+    const parsed = bracketFromFeed(await fdFetch("/matches?stage=LAST_32,LAST_16,QUARTER_FINALS,SEMI_FINALS,FINAL", env));
+    const payload = { results: parsed.results, unmapped: parsed.unmapped, fetchedAt: Date.now() };
+    try { await env.POOL.put("cache:knockout", JSON.stringify(payload)); } catch {}
+    return { ...payload, stale: false };
+  } catch (e) {
+    if (cache) return { ...cache, stale: true, error: String(e) };
+    return { results: {}, unmapped: [], fetchedAt: 0, stale: true, error: String(e) };
+  }
 }
 
 // Returns { matches, unmapped, fetchedAt, stale, error? }.

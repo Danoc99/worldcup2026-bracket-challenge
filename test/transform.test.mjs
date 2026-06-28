@@ -1,17 +1,18 @@
 import fs from "fs";
 import assert from "assert";
 import {
-  ordersFromStandings, ordersFromMatches, matchesFromFeed,
+  ordersFromStandings, ordersFromMatches, matchesFromFeed, bracketFromFeed,
   clinchedPositions, clinchedPositionsHTH, buildH2H, groupRemainingMatches, movementVsPrev,
   rankPlayers, playerMovementBetween,
 } from "../functions/_lib/transform.js";
 import { CANONICAL_TEAMS } from "../functions/_lib/teamMap.js";
 import { onRequestPost as submitEntry } from "../functions/api/entry.js";
 import { onRequestPost as adminPost } from "../functions/api/admin.js";
+import { onRequestPost as knockoutPost } from "../functions/api/knockout.js";
 import { onRequestGet as stateGet } from "../functions/api/state.js";
 import { writePlayerSnapshot } from "../functions/_lib/fd.js";
-import { LOCK_ISO, hashStr } from "../functions/_lib/util.js";
-import { tallyPicks } from "../src/data.js";
+import { LOCK_ISO, KNOCKOUT_LOCK_ISO, hashStr } from "../functions/_lib/util.js";
+import { tallyPicks, scoreKnockout } from "../src/data.js";
 
 // Our canonical groups (must match the front end)
 const GROUPS = {
@@ -915,6 +916,193 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
     const arr = POOL._kv["snapshots:players"];
     ok("writePlayerSnapshot: zero entries still writes", arr.length === 1);
     ok("writePlayerSnapshot: zero entries → empty ranks", Object.keys(arr[0].ranks).length === 0);
+  }
+}
+
+// ─── scoreKnockout ──────────────────────────────────────────────────────────
+{
+  const results = {
+    R32_1: { winner: "France", status: "final" },
+    R32_2: { winner: "Brazil", status: "final" },
+    R16_1: { winner: "France", status: "final" },
+  };
+
+  ok("scoreKnockout: correct R32 pick scores 20",
+    scoreKnockout({ R32_1: "France" }, results) === 20);
+
+  ok("scoreKnockout: wrong R32 pick scores 0",
+    scoreKnockout({ R32_1: "South Korea" }, results) === 0);
+
+  ok("scoreKnockout: correct R16 pick scores 40",
+    scoreKnockout({ R16_1: "France" }, results) === 40);
+
+  ok("scoreKnockout: multiple correct picks add up",
+    scoreKnockout({ R32_1: "France", R32_2: "Brazil", R16_1: "France" }, results) === 80);
+
+  // Eliminated-early: France picked to win R16_1 but actually lost R32_1 → 0 for both
+  const results2 = {
+    R32_1: { winner: "South Korea", status: "final" }, // France lost here
+    R16_1: { winner: "Brazil", status: "final" },      // France can't be here
+  };
+  ok("scoreKnockout: team eliminated early — 0 for all downstream picks",
+    scoreKnockout({ R32_1: "France", R16_1: "France" }, results2) === 0);
+
+  ok("scoreKnockout: null picks → 0", scoreKnockout(null, results) === 0);
+  ok("scoreKnockout: null results → 0", scoreKnockout({ R32_1: "France" }, null) === 0);
+  ok("scoreKnockout: TBD match (no winner) → 0",
+    scoreKnockout({ R32_1: "France" }, { R32_1: { status: "scheduled" } }) === 0);
+}
+
+// ─── bracketFromFeed ─────────────────────────────────────────────────────────
+{
+  const feedJson = {
+    matches: [
+      { stage: "LAST_32", utcDate: "2026-06-28T19:00:00Z", status: "FINISHED",
+        homeTeam: { name: "France", tla: "FRA" }, awayTeam: { name: "South Korea", tla: "KOR" },
+        score: { fullTime: { home: 2, away: 0 } } },
+      { stage: "LAST_32", utcDate: "2026-06-28T22:00:00Z", status: "SCHEDULED",
+        homeTeam: { name: "Brazil", tla: "BRA" }, awayTeam: { name: "Mexico", tla: "MEX" },
+        score: { fullTime: { home: null, away: null } } },
+      { stage: "LAST_16", utcDate: "2026-07-01T19:00:00Z", status: "SCHEDULED",
+        homeTeam: { name: "France", tla: "FRA" }, awayTeam: { name: "Brazil", tla: "BRA" },
+        score: { fullTime: { home: null, away: null } } },
+      // 3rd place playoff — should be excluded
+      { stage: "THIRD_PLACE", utcDate: "2026-07-11T15:00:00Z", status: "SCHEDULED",
+        homeTeam: { name: "Argentina", tla: "ARG" }, awayTeam: { name: "Spain", tla: "ESP" },
+        score: { fullTime: { home: null, away: null } } },
+    ],
+  };
+
+  const { results, unmapped } = bracketFromFeed(feedJson);
+
+  ok("bracketFromFeed: R32_1 mapped", results.R32_1?.home === "France" && results.R32_1?.away === "South Korea");
+  ok("bracketFromFeed: R32_1 winner set on finished match", results.R32_1?.winner === "France");
+  ok("bracketFromFeed: R32_1 status final", results.R32_1?.status === "final");
+  ok("bracketFromFeed: R32_2 no winner (scheduled)", !results.R32_2?.winner);
+  ok("bracketFromFeed: R16_1 parsed", results.R16_1?.home === "France");
+  ok("bracketFromFeed: 3rd place excluded", !results.THIRD_PLACE);
+  ok("bracketFromFeed: no unmapped teams", unmapped.length === 0);
+}
+
+// ─── knockout API — lock behavior ────────────────────────────────────────────
+{
+  function makeKvPool(initial = {}) {
+    const kv = { ...initial };
+    return {
+      _kv: kv,
+      get: async (k, t) => { const v = kv[k]; if (!v) return null; return t === "json" ? JSON.parse(JSON.stringify(v)) : v; },
+      put: async (k, v) => { kv[k] = typeof v === "string" ? JSON.parse(v) : v; },
+      delete: async (k) => { delete kv[k]; },
+      list: async ({ prefix }) => ({ keys: Object.keys(kv).filter((k) => k.startsWith(prefix)).map((k) => ({ name: k })) }),
+    };
+  }
+  function req(body) { return { json: async () => body }; }
+
+  // Seed a group entry so PIN check passes.
+  const poolName = "Test Pool";
+  const pin = "1234";
+  const name = "Alice";
+  const POOL = makeKvPool({
+    "config": { poolName, adminHash: hashStr("adminpw"), createdAt: Date.now() },
+    "entry:alice": { name, pin, predictions: {} },
+  });
+  const env = { POOL };
+
+  const validPicks = { R32_1: "France" };
+
+  // Before lock: should save.
+  {
+    const origNow = Date;
+    global.Date = class extends Date { constructor(...a) { super(...a); } static now() { return new globalThis.Date(KNOCKOUT_LOCK_ISO).getTime() - 60000; } };
+    const r = await knockoutPost({ request: req({ name, pin, picks: validPicks }), env });
+    const d = await r.json();
+    ok("knockout API: before lock → saves ok", d.ok === true);
+    global.Date = origNow;
+  }
+
+  // After lock: should reject with 423.
+  {
+    const origNow = Date;
+    global.Date = class extends Date { constructor(...a) { super(...a); } static now() { return new globalThis.Date(KNOCKOUT_LOCK_ISO).getTime() + 60000; } };
+    const r = await knockoutPost({ request: req({ name, pin, picks: validPicks }), env });
+    ok("knockout API: after lock → 423", r.status === 423);
+    global.Date = origNow;
+  }
+
+  // Wrong PIN: should reject with 403.
+  {
+    const r = await knockoutPost({ request: req({ name, pin: "9999", picks: validPicks }), env });
+    ok("knockout API: wrong PIN → 403", r.status === 403);
+  }
+
+  // No matching entry: should reject with 404.
+  {
+    const r = await knockoutPost({ request: req({ name: "Nobody", pin, picks: validPicks }), env });
+    ok("knockout API: no group entry → 404", r.status === 404);
+  }
+
+  // Inconsistent pick: pick Spain for R16_1 but picked France and Brazil for R32_1/R32_2.
+  {
+    const r = await knockoutPost({ request: req({ name, pin, picks: { R32_1: "France", R32_2: "Brazil", R16_1: "Spain" } }), env });
+    ok("knockout API: inconsistent R16 pick → 400", r.status === 400);
+  }
+}
+
+// ─── admin setBracketMatch ───────────────────────────────────────────────────
+{
+  function makeKvPool(initial = {}) {
+    const kv = {};
+    for (const [k, v] of Object.entries(initial)) kv[k] = JSON.parse(JSON.stringify(v));
+    return {
+      _kv: kv,
+      get: async (k, t) => { const v = kv[k]; if (v == null) return null; return t === "json" ? JSON.parse(JSON.stringify(v)) : JSON.stringify(v); },
+      put: async (k, v) => { kv[k] = typeof v === "string" ? JSON.parse(v) : v; },
+      delete: async (k) => { delete kv[k]; },
+      list: async ({ prefix }) => ({ keys: Object.keys(kv).filter((k) => k.startsWith(prefix)).map((k) => ({ name: k })) }),
+    };
+  }
+  function req(body) { return { json: async () => body }; }
+
+  const POOL = makeKvPool({ config: { poolName: "T", adminHash: hashStr("pw"), createdAt: 0 } });
+  const env = { POOL };
+  const pw = "pw";
+
+  // Set a matchup.
+  {
+    const r = await adminPost({ request: req({ adminPassword: pw, action: "setBracketMatch", matchId: "R32_1", home: "France", away: "Brazil" }), env });
+    const d = await r.json();
+    ok("admin setBracketMatch: saves ok", d.ok === true);
+    ok("admin setBracketMatch: stored correctly", POOL._kv.knockoutBracket?.R32_1?.home === "France");
+  }
+
+  // Reject non-R32 matchId.
+  {
+    const r = await adminPost({ request: req({ adminPassword: pw, action: "setBracketMatch", matchId: "R16_1", home: "France", away: "Brazil" }), env });
+    ok("admin setBracketMatch: non-R32 matchId → 400", r.status === 400);
+  }
+
+  // Clear a matchup.
+  {
+    const r = await adminPost({ request: req({ adminPassword: pw, action: "setBracketMatch", matchId: "R32_1", home: "", away: "" }), env });
+    const d = await r.json();
+    ok("admin setBracketMatch: clear ok", d.ok === true);
+    ok("admin setBracketMatch: cleared from KV", !POOL._kv.knockoutBracket?.R32_1);
+  }
+
+  // setKnockoutResult.
+  {
+    const r = await adminPost({ request: req({ adminPassword: pw, action: "setKnockoutResult", matchId: "R32_1", winner: "France", status: "final" }), env });
+    const d = await r.json();
+    ok("admin setKnockoutResult: saves ok", d.ok === true);
+    ok("admin setKnockoutResult: stored in manualResults.knockout", POOL._kv.manualResults?.knockout?.R32_1?.winner === "France");
+  }
+
+  // Clear knockout result.
+  {
+    const r = await adminPost({ request: req({ adminPassword: pw, action: "setKnockoutResult", matchId: "R32_1", winner: "", status: "final" }), env });
+    const d = await r.json();
+    ok("admin setKnockoutResult clear: ok", d.ok === true);
+    ok("admin setKnockoutResult clear: removed", !POOL._kv.manualResults?.knockout?.R32_1);
   }
 }
 

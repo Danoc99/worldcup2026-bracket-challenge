@@ -1,5 +1,5 @@
-import { json } from "../_lib/util.js";
-import { getGroupOrders, getMatches } from "../_lib/fd.js";
+import { json, slug } from "../_lib/util.js";
+import { getGroupOrders, getMatches, getKnockoutData } from "../_lib/fd.js";
 import { playerMovementBetween } from "../_lib/transform.js";
 
 const LETTERS = ["A","B","C","D","E","F","G","H","I","J","K","L"];
@@ -28,8 +28,10 @@ export async function onRequestGet({ env }) {
   let manualScores = {};
   try { manualScores = (await POOL.get("manualMatchScores", "json")) || {}; } catch {}
 
-  // live orders + full fixtures list from football-data (cached, serve-stale on failure)
-  const [api, fixtures] = await Promise.all([getGroupOrders(env), getMatches(env)]);
+  // live orders + fixtures + knockout data (all cached, serve-stale on failure)
+  const [api, fixtures, knockoutFeed] = await Promise.all([
+    getGroupOrders(env), getMatches(env), getKnockoutData(env),
+  ]);
 
   // merge: admin override wins, else API, else pending(null)
   const groups = {};
@@ -57,11 +59,49 @@ export async function onRequestGet({ env }) {
     ? playerMovementBetween(playerSnapshots[playerSnapshots.length - 2], playerSnapshots[playerSnapshots.length - 1])
     : {};
 
+  // Knockout bracket: admin-entered R32 matchups + feed results, manual overrides win.
+  let knockoutBracket = {};
+  try { knockoutBracket = (await POOL.get("knockoutBracket", "json")) || {}; } catch {}
+
+  // Merge feed results with manual knockout overrides (admin always wins).
+  const feedResults = knockoutFeed.results || {};
+  const manualKnockout = manual.knockout || {};
+  const knockoutResults = { ...feedResults, ...manualKnockout };
+
+  // Merge admin-entered R32 matchups with feed-detected matchups (admin wins).
+  // Feed may already have the matchups; admin can supplement/override.
+  const bracket = {};
+  for (const [id, feedEntry] of Object.entries(feedResults)) {
+    // Only carry R32 home/away from feed — later rounds derive from results.
+    if (id.startsWith("R32_")) {
+      bracket[id] = { home: feedEntry.home, away: feedEntry.away, source: "api" };
+    }
+  }
+  for (const [id, adminEntry] of Object.entries(knockoutBracket)) {
+    if (id === "updatedAt") continue;
+    bracket[id] = adminEntry; // admin wins
+  }
+  // Attach winner/status to every match from the merged results.
+  for (const [id, res] of Object.entries(knockoutResults)) {
+    bracket[id] = { ...(bracket[id] || {}), winner: res.winner, status: res.status };
+  }
+
+  // Collect all knockout picks, keyed by slug. Always returned; frontend hides
+  // non-self picks before KNOCKOUT_LOCK_ISO (same pattern as group picks).
+  const picksBySlug = {};
+  for (const e of entries) {
+    const s = slug(e.name);
+    let kEntry = null;
+    try { kEntry = await POOL.get("knockout:" + s, "json"); } catch {}
+    if (kEntry?.picks) picksBySlug[s] = kEntry.picks;
+  }
+
   return json({
     config: safeConfig,
     entries,
     groups,
     matches,
+    knockout: { bracket, picksBySlug },
     meta: {
       fetchedAt: api.fetchedAt,
       stale: api.stale,

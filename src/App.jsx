@@ -12,8 +12,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-  LOCK_ISO, GROUPS, GROUP_IDS, FLAG, SCORE_MATRIX, GROUP_TOTAL_MAX, POS_META,
-  scoreGroup, slug, clone, tallyPicks,
+  LOCK_ISO, KNOCKOUT_LOCK_ISO, GROUPS, GROUP_IDS, FLAG, SCORE_MATRIX, GROUP_TOTAL_MAX, POS_META,
+  scoreGroup, scoreKnockout, slug, clone, tallyPicks, KNOCKOUT_SCORES, ALL_MATCH_IDS, BRACKET_TREE,
 } from "./data.js";
 import { api } from "./api.js";
 
@@ -25,17 +25,20 @@ export default function App() {
   const [entries, setEntries] = useState([]);
   const [groups, setGroups] = useState({});
   const [matches, setMatches] = useState([]);
+  const [knockout, setKnockout] = useState({ bracket: {}, picksBySlug: {} });
   const [meta, setMeta] = useState({});
   const [me, setMe] = useState(() => { try { return JSON.parse(localStorage.getItem(ME_KEY)); } catch { return null; } });
   const [tab, setTab] = useState("picks");
   const [helpOpen, setHelpOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   const locked = now >= new Date(LOCK_ISO).getTime();
+  const knockoutLocked = now >= new Date(KNOCKOUT_LOCK_ISO).getTime();
 
   async function load() {
     try {
       const s = await api.getState();
-      setConfig(s.config); setEntries(s.entries || []); setGroups(s.groups || {}); setMatches(s.matches || []); setMeta(s.meta || {});
+      setConfig(s.config); setEntries(s.entries || []); setGroups(s.groups || {}); setMatches(s.matches || []);
+      setKnockout(s.knockout || { bracket: {}, picksBySlug: {} }); setMeta(s.meta || {});
     } catch (e) { /* keep last state */ }
     setReady(true);
   }
@@ -61,13 +64,14 @@ export default function App() {
 
   return (
     <Shell>
-      <Header config={config} locked={locked} now={now} helpOpen={helpOpen} setHelpOpen={setHelpOpen} />
+      <Header config={config} locked={locked} knockoutLocked={knockoutLocked} now={now} helpOpen={helpOpen} setHelpOpen={setHelpOpen} />
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
-      <Tabs tab={tab} setTab={setTab} count={entries.length} />
-      {tab === "picks" && <PicksTab me={me} saveMe={saveMe} entries={entries} locked={locked} reload={load} />}
+      <Tabs tab={tab} setTab={setTab} count={entries.length} hasBracket={Object.keys(knockout.bracket).length > 0} />
+      {tab === "picks" && <PicksTab me={me} saveMe={saveMe} entries={entries} locked={locked} knockoutLocked={knockoutLocked} knockout={knockout} reload={load} />}
+      {tab === "bracket" && <BracketTab me={me} knockout={knockout} knockoutLocked={knockoutLocked} entries={entries} reload={load} />}
       {tab === "matches" && <MatchesTab matches={matches} meta={meta} />}
-      {tab === "standings" && <StandingsTab entries={entries} groups={groups} meta={meta} locked={locked} me={me} />}
-      <AdminFooter groups={groups} entries={entries} matches={matches} reload={load} />
+      {tab === "standings" && <StandingsTab entries={entries} groups={groups} knockout={knockout} knockoutLocked={knockoutLocked} meta={meta} locked={locked} me={me} />}
+      <AdminFooter groups={groups} entries={entries} matches={matches} knockout={knockout} reload={load} />
       <FontAndTheme />
     </Shell>
   );
@@ -102,15 +106,19 @@ function FontAndTheme() {
 function Centered({ children }) { return <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", textAlign: "center" }}>{children}</div>; }
 
 /* --------------------------------- header --------------------------------- */
-function Header({ config, locked, now, helpOpen, setHelpOpen }) {
+function Header({ config, locked, knockoutLocked, now, helpOpen, setHelpOpen }) {
   const remain = new Date(LOCK_ISO).getTime() - now;
   const d = Math.max(0, Math.floor(remain / 86400000));
   const h = Math.max(0, Math.floor((remain % 86400000) / 3600000));
   const m = Math.max(0, Math.floor((remain % 3600000) / 60000));
+  const koRemain = new Date(KNOCKOUT_LOCK_ISO).getTime() - now;
+  const kod = Math.max(0, Math.floor(koRemain / 86400000));
+  const koh = Math.max(0, Math.floor((koRemain % 86400000) / 3600000));
+  const kom = Math.max(0, Math.floor((koRemain % 3600000) / 60000));
   return (
     <div className="rise" style={{ paddingTop: 28, paddingBottom: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--pitch)", fontWeight: 700, letterSpacing: 2, fontSize: 12, textTransform: "uppercase" }}>
-        <Trophy size={15} /> World Cup 2026 · Group Stage
+        <Trophy size={15} /> World Cup 2026
       </div>
       <h1 style={{ fontFamily: "var(--display)", fontSize: "clamp(34px,8vw,64px)", lineHeight: .95, margin: "6px 0 0", letterSpacing: 1, background: "linear-gradient(110deg,#1fb574 0%,#f5c542 70%)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
         {config.poolName || "BRACKET CHALLENGE"}
@@ -118,9 +126,16 @@ function Header({ config, locked, now, helpOpen, setHelpOpen }) {
       <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
           {locked
-            ? <><Lock size={15} style={{ color: "var(--gold)" }} /><span style={{ fontWeight: 700 }}>Picks locked</span><span style={{ color: "var(--muted)" }}>— tournament underway</span></>
-            : <><Unlock size={15} style={{ color: "var(--green)" }} /><span style={{ fontWeight: 700 }}>Picks lock in {d}d {h}h {m}m</span></>}
+            ? <><Lock size={15} style={{ color: "var(--gold)" }} /><span style={{ fontWeight: 700 }}>Group picks locked</span></>
+            : <><Unlock size={15} style={{ color: "var(--green)" }} /><span style={{ fontWeight: 700 }}>Group picks lock in {d}d {h}h {m}m</span></>}
         </div>
+        {locked && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--card)", border: "1px solid var(--line)", padding: "8px 14px", borderRadius: 999, fontSize: 14 }}>
+            {knockoutLocked
+              ? <><Lock size={15} style={{ color: "var(--gold)" }} /><span style={{ fontWeight: 700 }}>Bracket picks locked</span></>
+              : <><Unlock size={15} style={{ color: "var(--green)" }} /><span style={{ fontWeight: 700 }}>Bracket picks lock in {kod}d {koh}h {kom}m</span></>}
+          </div>
+        )}
         <HelpPill open={helpOpen} setOpen={setHelpOpen} />
       </div>
     </div>
@@ -151,13 +166,13 @@ function HelpPanel({ onClose }) {
 
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
           <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>How points work</div>
-          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 10px", lineHeight: 1.55 }}>You earn points for each group based on how close your predicted finishing order matches the real result.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 10px", lineHeight: 1.55 }}>You earn points for each group based on how close your predicted finishing order matches the real result. You also earn knockout points for every match winner you predict correctly.</p>
           <ul style={{ color: "var(--muted)", fontSize: 15, margin: 0, paddingLeft: 22, lineHeight: 1.75 }}>
             <li>Exact slot match → max points: <b style={{ color: "var(--text)" }}>25</b> for 1st, <b style={{ color: "var(--text)" }}>20</b> for 2nd, <b style={{ color: "var(--text)" }}>15</b> for 3rd</li>
             <li>Off by one or two slots → partial credit (5–15 pts)</li>
             <li>Predict ANY team to finish 4th → <b style={{ color: "var(--text)" }}>0 pts</b> no matter what</li>
           </ul>
-          <p style={{ color: "var(--muted)", fontSize: 15, margin: "10px 0 0", lineHeight: 1.55 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b>, so the group stage alone is worth up to <b style={{ color: "var(--text)" }}>720</b>.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "10px 0 0", lineHeight: 1.55 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b>, so the group stage alone is worth up to <b style={{ color: "var(--text)" }}>720</b>. Knockout rounds add up to <b style={{ color: "var(--text)" }}>1,600</b> more (R32: 20 · R16: 40 · QF: 80 · SF: 160 · Final: 320). Max combined: <b style={{ color: "var(--text)" }}>2,320 pts</b>.</p>
         </div>
 
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
@@ -209,9 +224,9 @@ function HelpPanel({ onClose }) {
         </div>
 
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Tiebreaker <span style={{ color: "var(--muted)", fontSize: 11, fontWeight: 700, letterSpacing: 1, marginLeft: 6 }}>· TBD</span></div>
-          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 8px", lineHeight: 1.55 }}>If two players finish tied on total points, we'll break the tie — the exact rule is still being finalized.</p>
-          <p style={{ color: "var(--muted)", fontSize: 15, margin: 0, lineHeight: 1.55 }}><b style={{ color: "var(--text)" }}>Leading candidate:</b> most correct knockout picks, weighted by round (R32 &lt; R16 &lt; QF &lt; SF &lt; Final). Group picks are easier to get right, so the tiebreaker should reward the hardest calls.</p>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Tiebreaker</div>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 8px", lineHeight: 1.55 }}>If two players finish tied on total points, the tiebreaker is <b style={{ color: "var(--text)" }}>knockout points only</b>. Whoever called more knockout matches correctly (with deeper rounds worth more) wins the tiebreak.</p>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: 0, lineHeight: 1.55 }}>This rewards the hardest calls: a correct Final pick (320 pts) outweighs 16 correct R32 picks combined (320 pts too), so depth matters when totals are tied.</p>
         </div>
 
         <div style={{ background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px" }}>
@@ -223,9 +238,10 @@ function HelpPanel({ onClose }) {
   );
 }
 
-function Tabs({ tab, setTab, count }) {
+function Tabs({ tab, setTab, count, hasBracket }) {
   const items = [
     { id: "picks", label: "My Picks", icon: ListOrdered },
+    ...(hasBracket ? [{ id: "bracket", label: "Bracket", icon: Crown }] : []),
     { id: "matches", label: "Matches", icon: CalendarDays },
     { id: "standings", label: `Standings${count ? " · " + count : ""}`, icon: Trophy },
   ];
@@ -269,7 +285,7 @@ function SetupCard({ onDone }) {
 }
 
 /* -------------------------------- picks ---------------------------------- */
-function PicksTab({ me, saveMe, entries, locked, reload }) {
+function PicksTab({ me, saveMe, entries, locked, knockoutLocked, knockout, reload }) {
   const [name, setName] = useState(me?.name || "");
   const [pin, setPin] = useState(me?.pin || "");
   const [preds, setPreds] = useState(null);
@@ -442,6 +458,238 @@ function PosBadge({ idx, small }) {
   return <div style={{ width: s, height: s, minWidth: s, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: small ? 10 : 12, color: idx === 3 ? "var(--muted)" : "#0b1410", background: idx === 3 ? "transparent" : mm.color, border: idx === 3 ? "1px solid var(--line)" : "none" }}>{mm.label}</div>;
 }
 
+/* -------------------------------- bracket -------------------------------- */
+
+// Round display order left→right: R32 left half, R16 left, QF left, SF left,
+// FINAL center, SF right, QF right, R16 right, R32 right.
+// Left half: R32_1-8, R16_1-4, QF_1-2, SF_1
+// Right half: SF_2, QF_3-4, R16_5-8, R32_9-16 (rendered right→left so they converge)
+const LEFT_ROUNDS = [
+  { round: "R32", ids: ["R32_1","R32_2","R32_3","R32_4","R32_5","R32_6","R32_7","R32_8"] },
+  { round: "R16", ids: ["R16_1","R16_2","R16_3","R16_4"] },
+  { round: "QF",  ids: ["QF_1","QF_2"] },
+  { round: "SF",  ids: ["SF_1"] },
+];
+const RIGHT_ROUNDS = [
+  { round: "SF",  ids: ["SF_2"] },
+  { round: "QF",  ids: ["QF_3","QF_4"] },
+  { round: "R16", ids: ["R16_5","R16_6","R16_7","R16_8"] },
+  { round: "R32", ids: ["R32_9","R32_10","R32_11","R32_12","R32_13","R32_14","R32_15","R32_16"] },
+];
+const ROUND_LABELS = { R32: "ROUND OF 32", R16: "ROUND OF 16", QF: "QUARTERS", SF: "SEMIS", FINAL: "FINAL" };
+
+function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
+  const { bracket, picksBySlug } = knockout;
+  const hasBracket = Object.keys(bracket).some((k) => bracket[k]?.home || bracket[k]?.away);
+
+  // Which player's bracket are we viewing? Default = me (by slug), or first entry.
+  const mySlug = me ? slug(me.name) : null;
+  const allSlugs = entries.map((e) => slug(e.name));
+  const [viewingSlug, setViewingSlug] = useState(mySlug || allSlugs[0] || null);
+  // Sync viewing slug when me changes
+  useEffect(() => { if (mySlug && !knockoutLocked) setViewingSlug(mySlug); }, [mySlug, knockoutLocked]);
+
+  // My own picks for editing (before lock).
+  const [myPicks, setMyPicks] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null);
+
+  useEffect(() => {
+    if (!mySlug) return;
+    setMyPicks(picksBySlug[mySlug] ? { ...picksBySlug[mySlug] } : {});
+  }, [mySlug, picksBySlug]);
+
+  function pickWinner(matchId, team) {
+    if (knockoutLocked || !mySlug) return;
+    setMyPicks((prev) => {
+      const next = { ...prev, [matchId]: team };
+      // When a pick changes, clear any downstream picks that relied on the old winner.
+      clearDownstream(next, matchId, prev[matchId]);
+      return next;
+    });
+    setSaveStatus(null);
+  }
+
+  async function savePicks() {
+    if (!me) return;
+    setSaving(true); setSaveStatus(null);
+    try {
+      await api.submitKnockout(me.name, me.pin, myPicks);
+      setSaveStatus({ ok: true, msg: "Bracket saved!" });
+      reload();
+    } catch (e) { setSaveStatus({ ok: false, msg: e.message }); }
+    setSaving(false);
+  }
+
+  if (!hasBracket) {
+    return <div className="rise"><Empty icon={Crown} title="Bracket not set up yet" sub="The admin will enter the R32 matchups — check back soon." /></div>;
+  }
+
+  // Picks to display: if before lock always show my own editable picks; after lock show selected player.
+  const displaySlug = knockoutLocked ? viewingSlug : mySlug;
+  const displayPicks = (knockoutLocked ? picksBySlug[displaySlug] : myPicks) || {};
+
+  return (
+    <div className="rise">
+      {/* Player selector — only after lock */}
+      {knockoutLocked && entries.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+          {entries.map((e) => {
+            const s = slug(e.name);
+            const on = s === viewingSlug;
+            const isMe = s === mySlug;
+            return (
+              <button key={s} className="btn" onClick={() => setViewingSlug(s)} style={{ padding: "7px 14px", fontSize: 13, background: on ? "linear-gradient(110deg,#1fb574,#f5c542)" : "var(--card)", color: on ? "#0b1410" : "var(--text)", border: on ? "none" : "1px solid var(--line)", borderRadius: 999 }}>
+                {e.name}{isMe ? " · you" : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!knockoutLocked && me && (
+        <Banner icon={Crown}>
+          Pick the winner of each match — click a team name to advance them. Locks at the first R32 kickoff.
+        </Banner>
+      )}
+      {!knockoutLocked && !me && (
+        <Banner icon={EyeOff}>Go to My Picks to join the pool, then come back to fill out your bracket.</Banner>
+      )}
+      {knockoutLocked && (
+        <Banner icon={Lock}>Bracket picks are locked. Viewing {viewingSlug === mySlug ? "your" : entries.find((e) => slug(e.name) === viewingSlug)?.name + "'s"} bracket.</Banner>
+      )}
+
+      {/* The bracket tree */}
+      <div style={{ overflowX: "auto", paddingBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 0, minWidth: 900 }}>
+          {/* Left half */}
+          {LEFT_ROUNDS.map(({ round, ids }) => (
+            <BracketColumn key={"L-" + round + ids[0]} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} />
+          ))}
+          {/* Final */}
+          <BracketColumn key="FINAL" round="FINAL" ids={["FINAL"]} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} isCenter />
+          {/* Right half */}
+          {RIGHT_ROUNDS.map(({ round, ids }) => (
+            <BracketColumn key={"R-" + round + ids[0]} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} />
+          ))}
+        </div>
+      </div>
+
+      {!knockoutLocked && mySlug && (
+        <div style={{ marginTop: 16 }}>
+          {saveStatus && <Note bad={!saveStatus.ok}>{saveStatus.msg}</Note>}
+          <button className="btn" disabled={saving} onClick={savePicks} style={{ marginTop: 12, width: "100%", padding: 15, background: "linear-gradient(110deg,#1fb574,#f5c542)", color: "#0b1410", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            {saving ? <><RefreshCw size={17} className="spin" /> Saving…</> : <><Save size={17} /> Save my bracket</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Clear picks for matches that depended on `oldWinner` being the winner of `changedId`.
+function clearDownstream(picks, changedId, oldWinner) {
+  if (!oldWinner) return;
+  for (const [id, feeders] of Object.entries(BRACKET_TREE)) {
+    if (!feeders.includes(changedId)) continue;
+    if (picks[id] === oldWinner) {
+      const prev = picks[id];
+      delete picks[id];
+      clearDownstream(picks, id, prev);
+    }
+  }
+}
+
+function BracketColumn({ round, ids, bracket, picks, onPick, isCenter }) {
+  const cellHeight = 72; // px per match cell
+  const roundCount = ids.length;
+  // Vertical spacing: cells are evenly spaced within the column.
+  // R32 has 8 cells on left/right; each subsequent round halves → natural bracket spacing.
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minWidth: isCenter ? 160 : 150, flex: isCenter ? "0 0 160px" : "0 0 150px" }}>
+      <div style={{ fontFamily: "var(--display)", fontSize: 10, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "4px 6px 8px", whiteSpace: "nowrap" }}>
+        {ROUND_LABELS[round]}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1 }}>
+        {ids.map((id, idx) => {
+          // Vertical centering within the bracket column.
+          // Groups of 2 R32 matches feed into 1 R16, so each later round's cell
+          // spans 2× the space. We achieve this with a growing margin-top.
+          const spacer = roundCount < 8 ? Math.floor((8 / roundCount - 1) * cellHeight / 2) : 0;
+          return (
+            <div key={id} style={{ marginTop: idx === 0 ? spacer : spacer * 2 }}>
+              <BracketMatchCell id={id} round={round} bracket={bracket} picks={picks} onPick={onPick} />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BracketMatchCell({ id, round, bracket, picks, onPick }) {
+  const match = bracket[id] || {};
+  // Derive home/away team for R16+ from the bracket tree + winners of feeder matches.
+  let home = match.home || null;
+  let away = match.away || null;
+  if (BRACKET_TREE[id]) {
+    const [feedA, feedB] = BRACKET_TREE[id];
+    home = bracket[feedA]?.winner || picks[feedA] || null;
+    away = bracket[feedB]?.winner || picks[feedB] || null;
+  }
+
+  const winner = match.winner || null;  // actual confirmed winner
+  const myPick = picks[id] || null;
+  const isFinal = match.status === "final";
+  const isLive = match.status === "live";
+
+  function TeamRow({ team, side }) {
+    if (!team) return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: side === "home" ? "1px solid var(--line)" : "none", opacity: .4 }}>
+        <span style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>TBD</span>
+      </div>
+    );
+    const isWinner = winner && winner === team;
+    const isEliminated = winner && winner !== team;
+    const isMyPick = myPick === team;
+    const pickCorrect = isFinal && isMyPick && isWinner;
+    const pickWrong = isFinal && isMyPick && isEliminated;
+    const canPick = !!onPick && !winner; // can only pick live/unplayed matches
+    return (
+      <div
+        onClick={() => canPick && onPick(id, team)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+          borderBottom: side === "home" ? "1px solid var(--line)" : "none",
+          cursor: canPick ? "pointer" : "default",
+          background: isMyPick && !isFinal ? "rgba(31,181,116,.12)" : "transparent",
+          opacity: isEliminated ? .45 : 1,
+          borderRadius: side === "home" ? "8px 8px 0 0" : "0 0 8px 8px",
+          transition: "background .1s ease",
+        }}
+        className={canPick ? "grouprow" : ""}
+      >
+        <span style={{ fontSize: 15 }}>{FLAG[team] || "🏳️"}</span>
+        <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: pickCorrect ? "var(--green)" : pickWrong ? "var(--red)" : isWinner ? "var(--gold)" : "var(--text)" }}>
+          {team}
+        </span>
+        {pickCorrect && <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />}
+        {pickWrong && <X size={11} style={{ color: "var(--red)", flexShrink: 0 }} />}
+        {isMyPick && !isFinal && <span style={{ fontSize: 9, color: "var(--pitch)", fontWeight: 800, flexShrink: 0 }}>✓</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: `1px solid ${isLive ? "rgba(230,57,70,.4)" : "var(--line)"}`, borderRadius: 8, margin: "2px 4px", overflow: "hidden" }}>
+      <TeamRow team={home} side="home" />
+      <TeamRow team={away} side="away" />
+      {isLive && <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 1, color: "var(--red)", textAlign: "center", padding: "2px 0" }}>LIVE</div>}
+    </div>
+  );
+}
+
 /* ------------------------------ standings -------------------------------- */
 /* -------------------------------- matches -------------------------------- */
 function MatchesTab({ matches, meta }) {
@@ -539,7 +787,7 @@ function stageName(stage) {
   }
 }
 
-function StandingsTab({ entries, groups, meta, locked, me }) {
+function StandingsTab({ entries, groups, knockout, knockoutLocked, meta, locked, me }) {
   // Multi-open: each row toggles independently so players can be compared side-by-side.
   const [open, setOpen] = useState(() => new Set());
   function toggle(name) {
@@ -554,14 +802,17 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
   const anyResults = liveCount + finalCount > 0;
   const allPending = pendingCount > 0 && !anyResults;
 
+  const { bracket: koBracket, picksBySlug: koPicks } = knockout || {};
   const rows = useMemo(() => entries.map((e) => {
-    let total = 0;
+    let groupPts = 0;
     GROUP_IDS.forEach((g) => {
       const r = groups[g];
-      if (r && r.status !== "pending") total += scoreGroup(e.predictions?.[g], r.order);
+      if (r && r.status !== "pending") groupPts += scoreGroup(e.predictions?.[g], r.order);
     });
-    return { ...e, total };
-  }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)), [entries, groups]);
+    const myKoPicks = koPicks?.[slug(e.name)] || {};
+    const koPts = scoreKnockout(myKoPicks, koBracket || {});
+    return { ...e, total: groupPts + koPts, groupPts, koPts };
+  }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)), [entries, groups, koBracket, koPicks]);
 
   if (entries.length === 0) return <div className="rise"><Empty icon={Users} title="No entries yet" sub="Be the first — head to My Picks and fill out your bracket." /></div>;
 
@@ -591,11 +842,13 @@ function StandingsTab({ entries, groups, meta, locked, me }) {
                 {anyResults && (
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontFamily: "var(--display)", fontSize: 26, color: "var(--gold)", lineHeight: 1 }}>{r.total}</div>
-                    <div style={{ color: "var(--muted)", fontSize: 11 }}>{anyLive ? "projected" : `/ ${GROUP_TOTAL_MAX} pts`}</div>
+                    <div style={{ color: "var(--muted)", fontSize: 11 }}>
+                      {r.koPts > 0 ? "incl. knockout" : anyLive ? "projected" : `/ ${GROUP_TOTAL_MAX} pts`}
+                    </div>
                   </div>
                 )}
               </button>
-              {open.has(r.name) && <div style={{ borderTop: "1px solid var(--line)", padding: "10px 16px 14px" }}><PlayerBreakdown entry={r} groups={groups} locked={locked} isMe={isMe} tally={tally} /></div>}
+              {open.has(r.name) && <div style={{ borderTop: "1px solid var(--line)", padding: "10px 16px 14px" }}><PlayerBreakdown entry={r} groups={groups} locked={locked} isMe={isMe} tally={tally} knockout={knockout} knockoutLocked={knockoutLocked} /></div>}
             </Card>
           </div>
         );
@@ -625,9 +878,20 @@ function PlayerMovementChip({ delta }) {
   );
 }
 
-function PlayerBreakdown({ entry, groups, locked, isMe, tally }) {
+function PlayerBreakdown({ entry, groups, locked, isMe, tally, knockout, knockoutLocked }) {
   if (!(locked || isMe)) return <div style={{ color: "var(--muted)", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}><EyeOff size={15} /> Picks hidden until lock (June 11).</div>;
+  const entrySlug = slug(entry.name);
+  const koPicks = knockout?.picksBySlug?.[entrySlug] || {};
+  const koBracket = knockout?.bracket || {};
+  const hasKoPicks = Object.keys(koPicks).length > 0;
+  const showKo = knockoutLocked || isMe;
+  const koRounds = [
+    { key: "R32", label: "R32 (×16)" }, { key: "R16", label: "R16 (×8)" },
+    { key: "QF", label: "QF (×4)" }, { key: "SF", label: "SF (×2)" }, { key: "FINAL", label: "Final (×1)" },
+  ];
+
   return (
+    <div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(120px,1fr))", gap: 8 }}>
       {GROUP_IDS.map((g) => {
         const pred = entry.predictions?.[g] || []; const r = groups[g];
@@ -672,6 +936,33 @@ function PlayerBreakdown({ entry, groups, locked, isMe, tally }) {
         );
       })}
     </div>
+
+    {/* Knockout summary card */}
+    {showKo && Object.keys(koBracket).length > 0 && (
+      <div style={{ marginTop: 8, background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontFamily: "var(--display)", fontSize: 13, color: "var(--gold)" }}>KNOCKOUT</span>
+          {hasKoPicks
+            ? <span style={{ fontWeight: 800, fontSize: 13, color: "var(--green)" }}>+{scoreKnockout(koPicks, koBracket)}</span>
+            : <span style={{ fontSize: 11, color: "var(--muted)" }}>no picks</span>}
+        </div>
+        {hasKoPicks && koRounds.map(({ key, label }) => {
+          const roundIds = ALL_MATCH_IDS.filter((id) => (id === "FINAL" ? key === "FINAL" : id.startsWith(key + "_")));
+          const correct = roundIds.filter((id) => koPicks[id] && koBracket[id]?.winner && koPicks[id] === koBracket[id].winner).length;
+          const total = roundIds.filter((id) => koBracket[id]?.winner).length;
+          if (total === 0) return null;
+          return (
+            <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, padding: "2px 0", color: "var(--muted)" }}>
+              <span style={{ minWidth: 90 }}>{label}</span>
+              <span style={{ color: "var(--text)" }}>{correct}/{total} correct</span>
+              <span style={{ marginLeft: "auto", color: "var(--green)", fontWeight: 700 }}>+{correct * KNOCKOUT_SCORES[key]}</span>
+            </div>
+          );
+        })}
+        {!hasKoPicks && <div style={{ fontSize: 11, color: "var(--muted)" }}>Bracket picks not submitted.</div>}
+      </div>
+    )}
+    </div>
   );
 }
 
@@ -688,20 +979,20 @@ function pickConsensus(slotMap) {
 }
 
 /* --------------------------------- admin --------------------------------- */
-function AdminFooter({ groups, entries, matches, reload }) {
+function AdminFooter({ groups, entries, matches, knockout, reload }) {
   const [show, setShow] = useState(false);
   return (
     <>
       <div style={{ textAlign: "center", marginTop: 40 }}>
         <button className="btn" onClick={() => setShow(true)} style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--muted)", padding: "8px 14px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 7 }}><Settings size={14} /> Admin · override results</button>
-        <div style={{ color: "#46506b", fontSize: 11, marginTop: 14 }}>World Cup 2026 · live scores auto-update · knockout bracket unlocks after the group stage</div>
+        <div style={{ color: "#46506b", fontSize: 11, marginTop: 14 }}>World Cup 2026 · live scores auto-update</div>
       </div>
-      {show && <AdminModal groups={groups} entries={entries} matches={matches} reload={reload} onClose={() => setShow(false)} />}
+      {show && <AdminModal groups={groups} entries={entries} matches={matches} knockout={knockout} reload={reload} onClose={() => setShow(false)} />}
     </>
   );
 }
 
-function AdminModal({ groups, entries, matches, reload, onClose }) {
+function AdminModal({ groups, entries, matches, knockout, reload, onClose }) {
   const [pw, setPw] = useState(""); const [authed, setAuthed] = useState(false); const [err, setErr] = useState(null);
   const [draft, setDraft] = useState(() => { const d = {}; GROUP_IDS.forEach((g) => (d[g] = groups[g]?.order ? [...groups[g].order] : [...GROUPS[g]])); return d; });
   // mode per group: "auto" (follow API), "live" (manual), "final" (manual)
@@ -760,6 +1051,8 @@ function AdminModal({ groups, entries, matches, reload, onClose }) {
               )}
             </div>
             <MatchScoresCard pw={pw} matches={matches} reload={reload} setMsg={setMsg} />
+            <BracketSetupCard pw={pw} knockout={knockout} reload={reload} setMsg={setMsg} />
+            <KnockoutResultsCard pw={pw} knockout={knockout} reload={reload} setMsg={setMsg} />
             <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>
               Standings update from the live feed on their own — you usually don't need to touch this. Use it only to <b style={{ color: "var(--muted)" }}>override</b> a group: <b style={{ color: "var(--text)" }}>Auto</b> follows the feed, <b style={{ color: "var(--red)" }}>Live</b>/<b style={{ color: "var(--green)" }}>Final</b> force your own order (handy for fixing an official tiebreaker the feed gets wrong).
             </p>
@@ -856,13 +1149,169 @@ function MatchScoresCard({ pw, matches, reload, setMsg }) {
   );
 }
 
+/* ----------------------- bracket admin cards ----------------------------- */
+
+// All 48 pool teams for admin dropdowns, sorted alphabetically.
+const ALL_TEAMS = Object.values({
+  A: ["Mexico","South Korea","South Africa","Czechia"],
+  B: ["Canada","Switzerland","Qatar","Bosnia and Herzegovina"],
+  C: ["Brazil","Scotland","Morocco","Haiti"],
+  D: ["United States","Paraguay","Australia","Türkiye"],
+  E: ["Germany","Ecuador","Ivory Coast","Curaçao"],
+  F: ["Netherlands","Japan","Tunisia","Sweden"],
+  G: ["Belgium","Iran","Egypt","New Zealand"],
+  H: ["Spain","Uruguay","Saudi Arabia","Cape Verde"],
+  I: ["France","Norway","Senegal","Iraq"],
+  J: ["Argentina","Austria","Algeria","Jordan"],
+  K: ["Portugal","Colombia","Uzbekistan","DR Congo"],
+  L: ["England","Croatia","Ghana","Panama"],
+}).flat().sort();
+
+const R32_IDS = Array.from({ length: 16 }, (_, i) => `R32_${i + 1}`);
+
+// Admin card to enter the 16 R32 matchups. Each match saves individually.
+function BracketSetupCard({ pw, knockout, reload, setMsg }) {
+  const bracketData = knockout?.bracket || {};
+  const [drafts, setDrafts] = useState({});
+  const [saving, setSaving] = useState(null);
+
+  function setDraft(id, side, val) {
+    setDrafts((p) => ({ ...p, [id]: { ...(p[id] || {}), [side]: val } }));
+  }
+
+  async function save(id) {
+    const d = drafts[id] || {};
+    const existing = bracketData[id] || {};
+    const home = d.home !== undefined ? d.home : (existing.home || "");
+    const away = d.away !== undefined ? d.away : (existing.away || "");
+    setSaving(id); setMsg(null);
+    try {
+      await api.adminSetBracketMatch(pw, id, home || null, away || null);
+      setDrafts((p) => { const n = { ...p }; delete n[id]; return n; });
+      setMsg(`Saved ${id}: ${home || "TBD"} vs ${away || "TBD"}.`);
+      reload();
+    } catch (e) { setMsg("ERR: " + e.message); }
+    setSaving(null);
+  }
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+      <div style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)", marginBottom: 4 }}>BRACKET SETUP · R32 MATCHUPS</div>
+      <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 10 }}>
+        Enter the 16 Round-of-32 matchups. Leave both blank for TBD. Feed auto-populates when available — admin entry wins.
+      </div>
+      {R32_IDS.map((id) => {
+        const d = drafts[id] || {};
+        const existing = bracketData[id] || {};
+        const homeVal = d.home !== undefined ? d.home : (existing.home || "");
+        const awayVal = d.away !== undefined ? d.away : (existing.away || "");
+        const isApi = existing.source === "api" && !d.home && !d.away;
+        const busy = saving === id;
+        return (
+          <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
+            <span style={{ minWidth: 54, fontFamily: "var(--display)", fontSize: 12, color: "var(--gold)" }}>{id}</span>
+            {isApi && <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 999, background: "rgba(31,181,116,.18)", color: "var(--pitch)", fontWeight: 800, letterSpacing: 1 }}>API</span>}
+            <select value={homeVal} onChange={(e) => setDraft(id, "home", e.target.value)} style={{ flex: 1, minWidth: 100, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: homeVal ? "var(--text)" : "var(--muted)", fontSize: 12, outline: "none" }}>
+              <option value="">— Home team —</option>
+              {ALL_TEAMS.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
+            </select>
+            <span style={{ color: "var(--muted)", fontSize: 12 }}>vs</span>
+            <select value={awayVal} onChange={(e) => setDraft(id, "away", e.target.value)} style={{ flex: 1, minWidth: 100, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: awayVal ? "var(--text)" : "var(--muted)", fontSize: 12, outline: "none" }}>
+              <option value="">— Away team —</option>
+              {ALL_TEAMS.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
+            </select>
+            <button className="btn" disabled={busy} onClick={() => save(id)} style={{ background: "var(--bg2)", border: "1px solid var(--line)", color: "var(--text)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, opacity: busy ? .5 : 1 }}>
+              {busy ? <RefreshCw size={12} className="spin" /> : <Save size={12} />} Save
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Admin card to override knockout match results (R32 through Final).
+function KnockoutResultsCard({ pw, knockout, reload, setMsg }) {
+  const bracketData = knockout?.bracket || {};
+  // Only show matches where both teams are known.
+  const knownMatches = ALL_MATCH_IDS.filter((id) => {
+    if (id.startsWith("R32_")) return bracketData[id]?.home && bracketData[id]?.away;
+    const feeders = BRACKET_TREE[id];
+    if (!feeders) return false;
+    return bracketData[feeders[0]]?.winner && bracketData[feeders[1]]?.winner;
+  });
+
+  const [drafts, setDrafts] = useState({});
+  const [saving, setSaving] = useState(null);
+
+  function teamOptions(id) {
+    if (id.startsWith("R32_")) return [bracketData[id]?.home, bracketData[id]?.away].filter(Boolean);
+    const feeders = BRACKET_TREE[id] || [];
+    return feeders.map((f) => bracketData[f]?.winner).filter(Boolean);
+  }
+
+  async function save(id) {
+    const d = drafts[id] || {};
+    const winner = d.winner !== undefined ? d.winner : (bracketData[id]?.winner || "");
+    const status = d.status || "final";
+    setSaving(id); setMsg(null);
+    try {
+      await api.adminSetKnockoutResult(pw, id, winner || null, status);
+      setDrafts((p) => { const n = { ...p }; delete n[id]; return n; });
+      setMsg(winner ? `Set ${id} winner: ${winner}.` : `Cleared ${id} override.`);
+      reload();
+    } catch (e) { setMsg("ERR: " + e.message); }
+    setSaving(null);
+  }
+
+  if (knownMatches.length === 0) return null;
+
+  return (
+    <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
+      <div style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)", marginBottom: 4 }}>KNOCKOUT RESULTS</div>
+      <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 10 }}>
+        Override the winner of any knockout match. Feed picks these up automatically when available.
+      </div>
+      {knownMatches.map((id) => {
+        const d = drafts[id] || {};
+        const current = bracketData[id] || {};
+        const opts = teamOptions(id);
+        const winnerVal = d.winner !== undefined ? d.winner : (current.winner || "");
+        const statusVal = d.status || current.status || "final";
+        const busy = saving === id;
+        const round = id === "FINAL" ? "FINAL" : id.split("_")[0];
+        return (
+          <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
+            <span style={{ minWidth: 54, fontFamily: "var(--display)", fontSize: 12, color: "var(--gold)" }}>{id}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 40 }}>+{KNOCKOUT_SCORES[round]}</span>
+            <select value={winnerVal} onChange={(e) => setDrafts((p) => ({ ...p, [id]: { ...(p[id] || {}), winner: e.target.value } }))} style={{ flex: 1, minWidth: 100, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: winnerVal ? "var(--text)" : "var(--muted)", fontSize: 12, outline: "none" }}>
+              <option value="">— Winner —</option>
+              {opts.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
+            </select>
+            <select value={statusVal} onChange={(e) => setDrafts((p) => ({ ...p, [id]: { ...(p[id] || {}), status: e.target.value } }))} style={{ width: 70, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: "var(--text)", fontSize: 12, outline: "none" }}>
+              <option value="live">Live</option>
+              <option value="final">Final</option>
+            </select>
+            <button className="btn" disabled={busy} onClick={() => save(id)} style={{ background: "var(--bg2)", border: "1px solid var(--line)", color: "var(--text)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, opacity: busy ? .5 : 1 }}>
+              {busy ? <RefreshCw size={12} className="spin" /> : <Save size={12} />} Save
+            </button>
+            {current.winner && (
+              <button className="btn" disabled={busy} onClick={() => { setDrafts((p) => ({ ...p, [id]: { winner: "", status: "final" } })); setTimeout(() => save(id), 0); }} style={{ background: "transparent", border: "1px solid rgba(230,57,70,.35)", color: "var(--red)", padding: "5px 10px", fontSize: 12, opacity: busy ? .5 : 1 }}>Clear</button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ------------------------------ scoring key ------------------------------ */
 function ScoringKey() {
   const rows = [["Team finished 1st", [25, 15, 5, 0]], ["Team finished 2nd", [15, 20, 5, 0]], ["Team finished 3rd", [5, 5, 15, 0]], ["Team finished 4th", [0, 0, 0, 0]]];
   return (
     <Card style={{ marginTop: 22 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, marginBottom: 4 }}><Crown size={16} style={{ color: "var(--gold)" }} /> How points work</div>
-      <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b> — <b style={{ color: "var(--text)" }}>720</b> across all 12. The knockout phase later adds up to <b style={{ color: "var(--text)" }}>1,600</b> more (20/40/80/160/320 a round; the champion pick alone is 320). Predicting 4th is worth nothing, so the obvious last-place team never pads a score.</p>
+      <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 0 }}>Each group is worth up to <b style={{ color: "var(--text)" }}>60 pts</b> — <b style={{ color: "var(--text)" }}>720</b> across all 12. The knockout bracket adds up to <b style={{ color: "var(--text)" }}>1,600</b> more (R32=20 / R16=40 / QF=80 / SF=160 / Final=320). Max combined: <b style={{ color: "var(--text)" }}>2,320 pts</b>. Predicting 4th is worth nothing, so the obvious last-place team never pads a score.</p>
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 360 }}>
           <thead><tr style={{ color: "var(--muted)" }}><th style={{ textAlign: "left", padding: "6px 8px" }}>You predicted →</th>{["1st", "2nd", "3rd", "4th"].map((h) => <th key={h} style={{ padding: "6px 8px" }}>{h}</th>)}</tr></thead>
