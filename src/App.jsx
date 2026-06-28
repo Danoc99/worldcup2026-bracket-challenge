@@ -502,14 +502,32 @@ function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
   useEffect(() => { if (mySlug && !knockoutLocked) setViewingSlug(mySlug); }, [mySlug, knockoutLocked]);
 
   // My own picks for editing (before lock).
-  const [myPicks, setMyPicks] = useState({});
+  const lsKey = mySlug ? `wc26_ko_draft_${mySlug}` : null;
+
+  const [myPicks, setMyPicks] = useState(() => {
+    if (!mySlug) return {};
+    try {
+      const saved = localStorage.getItem(`wc26_ko_draft_${mySlug}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return picksBySlug[mySlug] ? { ...picksBySlug[mySlug] } : {};
+  });
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
 
+  // Sync from server only when there's no local draft in progress
   useEffect(() => {
     if (!mySlug) return;
+    if (lsKey && localStorage.getItem(lsKey)) return;
     setMyPicks(picksBySlug[mySlug] ? { ...picksBySlug[mySlug] } : {});
   }, [mySlug, picksBySlug]);
+
+  // Persist draft picks across tab switches / page blurs
+  useEffect(() => {
+    if (!lsKey || knockoutLocked) return;
+    if (Object.keys(myPicks).length === 0) localStorage.removeItem(lsKey);
+    else localStorage.setItem(lsKey, JSON.stringify(myPicks));
+  }, [myPicks, lsKey, knockoutLocked]);
 
   function pickWinner(matchId, team) {
     if (knockoutLocked || !mySlug) return;
@@ -527,6 +545,7 @@ function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
     setSaving(true); setSaveStatus(null);
     try {
       await api.submitKnockout(me.name, me.pin, myPicks);
+      if (lsKey) localStorage.removeItem(lsKey);
       setSaveStatus({ ok: true, msg: "Bracket saved!" });
       reload();
     } catch (e) { setSaveStatus({ ok: false, msg: e.message }); }
