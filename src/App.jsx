@@ -1170,62 +1170,132 @@ const ALL_TEAMS = Object.values({
 const R32_IDS = Array.from({ length: 16 }, (_, i) => `R32_${i + 1}`);
 
 // Admin card to enter the 16 R32 matchups. Each match saves individually.
+// Visual bracket entry for admin. Shows the same left/right tree layout as
+// BracketTab so the admin can orient to the real bracket online. R32 cells are
+// editable in-place: tap to expand dropdowns, save per match individually.
+// R16+ cells show "→ Winner of R32_X" placeholders (read-only here).
 function BracketSetupCard({ pw, knockout, reload, setMsg }) {
   const bracketData = knockout?.bracket || {};
-  const [drafts, setDrafts] = useState({});
-  const [saving, setSaving] = useState(null);
+  const [editing, setEditing] = useState(null); // which R32_X is open
+  const [draft, setDraftState] = useState({ home: "", away: "" });
+  const [saving, setSaving] = useState(false);
 
-  function setDraft(id, side, val) {
-    setDrafts((p) => ({ ...p, [id]: { ...(p[id] || {}), [side]: val } }));
+  function openEdit(id) {
+    const existing = bracketData[id] || {};
+    setDraftState({ home: existing.home || "", away: existing.away || "" });
+    setEditing(id);
   }
 
-  async function save(id) {
-    const d = drafts[id] || {};
-    const existing = bracketData[id] || {};
-    const home = d.home !== undefined ? d.home : (existing.home || "");
-    const away = d.away !== undefined ? d.away : (existing.away || "");
-    setSaving(id); setMsg(null);
+  async function save() {
+    if (!editing) return;
+    setSaving(true); setMsg(null);
     try {
-      await api.adminSetBracketMatch(pw, id, home || null, away || null);
-      setDrafts((p) => { const n = { ...p }; delete n[id]; return n; });
-      setMsg(`Saved ${id}: ${home || "TBD"} vs ${away || "TBD"}.`);
+      await api.adminSetBracketMatch(pw, editing, draft.home || null, draft.away || null);
+      setMsg(`Saved ${editing}: ${draft.home || "TBD"} vs ${draft.away || "TBD"}.`);
+      setEditing(null);
       reload();
     } catch (e) { setMsg("ERR: " + e.message); }
-    setSaving(null);
+    setSaving(false);
+  }
+
+  // Derive display label for any match cell.
+  function cellLabel(id) {
+    if (id.startsWith("R32_")) {
+      const m = bracketData[id] || {};
+      const h = m.home; const a = m.away;
+      if (h && a) return `${FLAG[h] || ""} ${h}\n${FLAG[a] || ""} ${a}`;
+      if (h) return `${FLAG[h] || ""} ${h}\nTBD`;
+      if (a) return `TBD\n${FLAG[a] || ""} ${a}`;
+      return "TBD\nvs\nTBD";
+    }
+    const feeders = BRACKET_TREE[id];
+    if (!feeders) return "FINAL";
+    const [a, b] = feeders;
+    const wa = bracketData[a]?.winner; const wb = bracketData[b]?.winner;
+    if (wa && wb) return `${FLAG[wa] || ""} ${wa}\n${FLAG[wb] || ""} ${wb}`;
+    return `W of ${a}\nvs\nW of ${b}`;
+  }
+
+  function AdminCell({ id, roundLabel }) {
+    const isR32 = id.startsWith("R32_");
+    const isEditing = editing === id;
+    const existing = bracketData[id] || {};
+    const isApi = isR32 && existing.source === "api" && !isEditing;
+    const lines = cellLabel(id).split("\n");
+    return (
+      <div style={{ background: isEditing ? "var(--card2)" : "var(--card)", border: `1px solid ${isEditing ? "var(--pitch)" : "var(--line)"}`, borderRadius: 8, margin: "2px 3px", overflow: "hidden", minWidth: 130 }}>
+        {isEditing ? (
+          <div style={{ padding: "6px 8px" }}>
+            <div style={{ fontFamily: "var(--display)", fontSize: 10, color: "var(--gold)", marginBottom: 5 }}>{id}</div>
+            <select value={draft.home} onChange={(e) => setDraftState((p) => ({ ...p, home: e.target.value }))} style={{ width: "100%", marginBottom: 4, padding: "4px 5px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 6, color: draft.home ? "var(--text)" : "var(--muted)", fontSize: 11, outline: "none" }}>
+              <option value="">— Team 1 —</option>
+              {ALL_TEAMS.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
+            </select>
+            <select value={draft.away} onChange={(e) => setDraftState((p) => ({ ...p, away: e.target.value }))} style={{ width: "100%", marginBottom: 6, padding: "4px 5px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 6, color: draft.away ? "var(--text)" : "var(--muted)", fontSize: 11, outline: "none" }}>
+              <option value="">— Team 2 —</option>
+              {ALL_TEAMS.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
+            </select>
+            <div style={{ display: "flex", gap: 4 }}>
+              <button className="btn" disabled={saving} onClick={save} style={{ flex: 1, background: "var(--pitch)", color: "#0b1410", padding: "4px 0", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", gap: 3 }}>
+                {saving ? <RefreshCw size={10} className="spin" /> : <Save size={10} />} Save
+              </button>
+              <button className="btn" onClick={() => setEditing(null)} style={{ background: "var(--bg2)", border: "1px solid var(--line)", color: "var(--muted)", padding: "4px 8px", fontSize: 11 }}>✕</button>
+            </div>
+          </div>
+        ) : (
+          <div onClick={() => isR32 && openEdit(id)} style={{ padding: "7px 9px", cursor: isR32 ? "pointer" : "default" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+              <span style={{ fontFamily: "var(--display)", fontSize: 9, color: "var(--gold)", letterSpacing: 1 }}>{id}</span>
+              {isApi && <span style={{ fontSize: 8, padding: "1px 4px", borderRadius: 3, background: "rgba(31,181,116,.2)", color: "var(--pitch)", fontWeight: 800 }}>API</span>}
+              {isR32 && !isApi && <span style={{ fontSize: 9, color: "var(--muted)" }}>tap</span>}
+            </div>
+            {lines.map((line, i) => (
+              <div key={i} style={{ fontSize: 11, color: line.startsWith("W of") || line === "TBD" || line === "vs" ? "var(--muted)" : "var(--text)", fontStyle: line.startsWith("W of") || line === "TBD" || line === "vs" ? "italic" : "normal", lineHeight: 1.4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {line}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
       <div style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)", marginBottom: 4 }}>BRACKET SETUP · R32 MATCHUPS</div>
       <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 10 }}>
-        Enter the 16 Round-of-32 matchups. Leave both blank for TBD. Feed auto-populates when available — admin entry wins.
+        Tap any R32 match to set the two teams. Layout mirrors the real bracket — left side top-half, right side bottom-half. Feed fills slots automatically when available (API badge).
       </div>
-      {R32_IDS.map((id) => {
-        const d = drafts[id] || {};
-        const existing = bracketData[id] || {};
-        const homeVal = d.home !== undefined ? d.home : (existing.home || "");
-        const awayVal = d.away !== undefined ? d.away : (existing.away || "");
-        const isApi = existing.source === "api" && !d.home && !d.away;
-        const busy = saving === id;
-        return (
-          <div key={id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 0", borderTop: "1px solid var(--line)", flexWrap: "wrap" }}>
-            <span style={{ minWidth: 54, fontFamily: "var(--display)", fontSize: 12, color: "var(--gold)" }}>{id}</span>
-            {isApi && <span style={{ fontSize: 10, padding: "2px 6px", borderRadius: 999, background: "rgba(31,181,116,.18)", color: "var(--pitch)", fontWeight: 800, letterSpacing: 1 }}>API</span>}
-            <select value={homeVal} onChange={(e) => setDraft(id, "home", e.target.value)} style={{ flex: 1, minWidth: 100, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: homeVal ? "var(--text)" : "var(--muted)", fontSize: 12, outline: "none" }}>
-              <option value="">— Home team —</option>
-              {ALL_TEAMS.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
-            </select>
-            <span style={{ color: "var(--muted)", fontSize: 12 }}>vs</span>
-            <select value={awayVal} onChange={(e) => setDraft(id, "away", e.target.value)} style={{ flex: 1, minWidth: 100, padding: "5px 6px", background: "var(--bg2)", border: "1px solid var(--line)", borderRadius: 7, color: awayVal ? "var(--text)" : "var(--muted)", fontSize: 12, outline: "none" }}>
-              <option value="">— Away team —</option>
-              {ALL_TEAMS.map((t) => <option key={t} value={t}>{FLAG[t] || ""} {t}</option>)}
-            </select>
-            <button className="btn" disabled={busy} onClick={() => save(id)} style={{ background: "var(--bg2)", border: "1px solid var(--line)", color: "var(--text)", padding: "5px 10px", fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4, opacity: busy ? .5 : 1 }}>
-              {busy ? <RefreshCw size={12} className="spin" /> : <Save size={12} />} Save
-            </button>
+      <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 0, minWidth: 860 }}>
+          {LEFT_ROUNDS.map(({ round, ids }) => (
+            <div key={"AL-" + ids[0]} style={{ display: "flex", flexDirection: "column", flex: "0 0 140px", minWidth: 140 }}>
+              <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "2px 4px 6px", whiteSpace: "nowrap" }}>{ROUND_LABELS[round]}</div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {ids.map((id, idx) => {
+                  const spacer = ids.length < 8 ? Math.floor((8 / ids.length - 1) * 38) : 0;
+                  return <div key={id} style={{ marginTop: idx === 0 ? spacer : spacer * 2 }}><AdminCell id={id} /></div>;
+                })}
+              </div>
+            </div>
+          ))}
+          <div style={{ display: "flex", flexDirection: "column", flex: "0 0 150px", minWidth: 150 }}>
+            <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "2px 4px 6px" }}>{ROUND_LABELS.FINAL}</div>
+            <div style={{ marginTop: Math.floor((8 - 1) * 38) }}><AdminCell id="FINAL" /></div>
           </div>
-        );
-      })}
+          {RIGHT_ROUNDS.map(({ round, ids }) => (
+            <div key={"AR-" + ids[0]} style={{ display: "flex", flexDirection: "column", flex: "0 0 140px", minWidth: 140 }}>
+              <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "2px 4px 6px", whiteSpace: "nowrap" }}>{ROUND_LABELS[round]}</div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {ids.map((id, idx) => {
+                  const spacer = ids.length < 8 ? Math.floor((8 / ids.length - 1) * 38) : 0;
+                  return <div key={id} style={{ marginTop: idx === 0 ? spacer : spacer * 2 }}><AdminCell id={id} /></div>;
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
