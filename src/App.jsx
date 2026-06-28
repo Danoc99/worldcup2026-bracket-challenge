@@ -464,17 +464,29 @@ function PosBadge({ idx, small }) {
 // FINAL center, SF right, QF right, R16 right, R32 right.
 // Left half: R32_1-8, R16_1-4, QF_1-2, SF_1
 // Right half: SF_2, QF_3-4, R16_5-8, R32_9-16 (rendered right→left so they converge)
-const LEFT_ROUNDS = [
-  { round: "R32", ids: ["R32_1","R32_2","R32_3","R32_4","R32_5","R32_6","R32_7","R32_8"] },
-  { round: "R16", ids: ["R16_1","R16_2","R16_3","R16_4"] },
-  { round: "QF",  ids: ["QF_1","QF_2"] },
-  { round: "SF",  ids: ["SF_1"] },
-];
-const RIGHT_ROUNDS = [
-  { round: "SF",  ids: ["SF_2"] },
-  { round: "QF",  ids: ["QF_3","QF_4"] },
-  { round: "R16", ids: ["R16_5","R16_6","R16_7","R16_8"] },
-  { round: "R32", ids: ["R32_9","R32_10","R32_11","R32_12","R32_13","R32_14","R32_15","R32_16"] },
+const CELL_H = 72;   // px per R32 slot (determines all vertical spacing)
+const BRACKET_H = 16 * CELL_H; // 1152px total bracket height
+const COL_W = 148;
+const CONN_W = 32;
+const HEADER_H = 22;
+
+function matchCenterY(id) {
+  if (id === "FINAL") return 8 * CELL_H;
+  const [prefix, n] = id.split("_");
+  const k = parseInt(n, 10);
+  if (prefix === "R32") return (k - 0.5) * CELL_H;
+  if (prefix === "R16") return (2 * k - 1) * CELL_H;
+  if (prefix === "QF")  return (4 * k - 2) * CELL_H;
+  if (prefix === "SF")  return (8 * k - 4) * CELL_H;
+  return 8 * CELL_H;
+}
+
+const ALL_ROUNDS = [
+  { round: "R32", ids: ["R32_1","R32_2","R32_3","R32_4","R32_5","R32_6","R32_7","R32_8","R32_9","R32_10","R32_11","R32_12","R32_13","R32_14","R32_15","R32_16"] },
+  { round: "R16", ids: ["R16_1","R16_2","R16_3","R16_4","R16_5","R16_6","R16_7","R16_8"] },
+  { round: "QF",  ids: ["QF_1","QF_2","QF_3","QF_4"] },
+  { round: "SF",  ids: ["SF_1","SF_2"] },
+  { round: "FINAL", ids: ["FINAL"] },
 ];
 const ROUND_LABELS = { R32: "ROUND OF 32", R16: "ROUND OF 16", QF: "QUARTERS", SF: "SEMIS", FINAL: "FINAL" };
 
@@ -561,17 +573,11 @@ function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
 
       {/* The bracket tree */}
       <div style={{ overflowX: "auto", paddingBottom: 12 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 0, minWidth: 900 }}>
-          {/* Left half */}
-          {LEFT_ROUNDS.map(({ round, ids }) => (
-            <BracketColumn key={"L-" + round + ids[0]} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} />
-          ))}
-          {/* Final */}
-          <BracketColumn key="FINAL" round="FINAL" ids={["FINAL"]} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} isCenter />
-          {/* Right half */}
-          {RIGHT_ROUNDS.map(({ round, ids }) => (
-            <BracketColumn key={"R-" + round + ids[0]} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} />
-          ))}
+        <div style={{ display: "flex", alignItems: "flex-start", minWidth: ALL_ROUNDS.length * COL_W + (ALL_ROUNDS.length - 1) * CONN_W }}>
+          {ALL_ROUNDS.flatMap(({ round, ids }, i) => [
+            i > 0 && <BracketConnector key={"conn-" + round} toRound={round} />,
+            <BracketColumn key={"col-" + round} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} />,
+          ]).filter(Boolean)}
         </div>
       </div>
 
@@ -600,29 +606,44 @@ function clearDownstream(picks, changedId, oldWinner) {
   }
 }
 
-function BracketColumn({ round, ids, bracket, picks, onPick, isCenter }) {
-  const cellHeight = 72; // px per match cell
-  const roundCount = ids.length;
-  // Vertical spacing: cells are evenly spaced within the column.
-  // R32 has 8 cells on left/right; each subsequent round halves → natural bracket spacing.
+function BracketColumn({ round, ids, bracket, picks, onPick }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", minWidth: isCenter ? 160 : 150, flex: isCenter ? "0 0 160px" : "0 0 150px" }}>
-      <div style={{ fontFamily: "var(--display)", fontSize: 10, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "4px 6px 8px", whiteSpace: "nowrap" }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: `0 0 ${COL_W}px`, width: COL_W }}>
+      <div style={{ fontFamily: "var(--display)", fontSize: 10, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", height: HEADER_H, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 3, whiteSpace: "nowrap" }}>
         {ROUND_LABELS[round]}
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 0, flex: 1 }}>
-        {ids.map((id, idx) => {
-          // Vertical centering within the bracket column.
-          // Groups of 2 R32 matches feed into 1 R16, so each later round's cell
-          // spans 2× the space. We achieve this with a growing margin-top.
-          const spacer = roundCount < 8 ? Math.floor((8 / roundCount - 1) * cellHeight / 2) : 0;
+      <div style={{ position: "relative", height: BRACKET_H }}>
+        {ids.map((id) => (
+          <div key={id} style={{ position: "absolute", top: matchCenterY(id) - CELL_H / 2, left: 0, right: 0 }}>
+            <BracketMatchCell id={id} round={round} bracket={bracket} picks={picks} onPick={onPick} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BracketConnector({ toRound }) {
+  const mid = CONN_W / 2;
+  const connEntries = Object.entries(BRACKET_TREE).filter(([parentId]) =>
+    (parentId === "FINAL" ? "FINAL" : parentId.split("_")[0]) === toRound
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: `0 0 ${CONN_W}px`, width: CONN_W }}>
+      <div style={{ height: HEADER_H }} />
+      <svg width={CONN_W} height={BRACKET_H} style={{ display: "block" }}>
+        {connEntries.map(([parentId, [feedAId, feedBId]]) => {
+          const ay = matchCenterY(feedAId);
+          const by = matchCenterY(feedBId);
+          const py = matchCenterY(parentId);
           return (
-            <div key={id} style={{ marginTop: idx === 0 ? spacer : spacer * 2 }}>
-              <BracketMatchCell id={id} round={round} bracket={bracket} picks={picks} onPick={onPick} />
-            </div>
+            <g key={parentId}>
+              <path d={`M 0 ${ay} H ${mid} V ${by} H 0`} fill="none" stroke="var(--line)" strokeWidth={1.5} strokeLinejoin="round" />
+              <path d={`M ${mid} ${py} H ${CONN_W}`} fill="none" stroke="var(--line)" strokeWidth={1.5} />
+            </g>
           );
         })}
-      </div>
+      </svg>
     </div>
   );
 }
@@ -1264,36 +1285,46 @@ function BracketSetupCard({ pw, knockout, reload, setMsg }) {
     <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 14 }}>
       <div style={{ fontFamily: "var(--display)", fontSize: 18, color: "var(--gold)", marginBottom: 4 }}>BRACKET SETUP · R32 MATCHUPS</div>
       <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 10 }}>
-        Tap any R32 match to set the two teams. Layout mirrors the real bracket — left side top-half, right side bottom-half. Feed fills slots automatically when available (API badge).
+        Tap any R32 match to set the two teams. R32_1 is at the top, R32_16 at the bottom — matches the real bracket order. Feed fills slots automatically when available (API badge).
       </div>
       <div style={{ overflowX: "auto", paddingBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 0, minWidth: 860 }}>
-          {LEFT_ROUNDS.map(({ round, ids }) => (
-            <div key={"AL-" + ids[0]} style={{ display: "flex", flexDirection: "column", flex: "0 0 140px", minWidth: 140 }}>
-              <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "2px 4px 6px", whiteSpace: "nowrap" }}>{ROUND_LABELS[round]}</div>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {ids.map((id, idx) => {
-                  const spacer = ids.length < 8 ? Math.floor((8 / ids.length - 1) * 38) : 0;
-                  return <div key={id} style={{ marginTop: idx === 0 ? spacer : spacer * 2 }}><AdminCell id={id} /></div>;
-                })}
-              </div>
-            </div>
-          ))}
-          <div style={{ display: "flex", flexDirection: "column", flex: "0 0 150px", minWidth: 150 }}>
-            <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "2px 4px 6px" }}>{ROUND_LABELS.FINAL}</div>
-            <div style={{ marginTop: Math.floor((8 - 1) * 38) }}><AdminCell id="FINAL" /></div>
-          </div>
-          {RIGHT_ROUNDS.map(({ round, ids }) => (
-            <div key={"AR-" + ids[0]} style={{ display: "flex", flexDirection: "column", flex: "0 0 140px", minWidth: 140 }}>
-              <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", padding: "2px 4px 6px", whiteSpace: "nowrap" }}>{ROUND_LABELS[round]}</div>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                {ids.map((id, idx) => {
-                  const spacer = ids.length < 8 ? Math.floor((8 / ids.length - 1) * 38) : 0;
-                  return <div key={id} style={{ marginTop: idx === 0 ? spacer : spacer * 2 }}><AdminCell id={id} /></div>;
-                })}
-              </div>
-            </div>
-          ))}
+        <div style={{ display: "flex", alignItems: "flex-start", minWidth: ALL_ROUNDS.length * 140 + (ALL_ROUNDS.length - 1) * CONN_W }}>
+          {ALL_ROUNDS.flatMap(({ round, ids }, i) => {
+            const mid = CONN_W / 2;
+            const connEntries = i > 0 ? Object.entries(BRACKET_TREE).filter(([parentId]) =>
+              (parentId === "FINAL" ? "FINAL" : parentId.split("_")[0]) === round
+            ) : [];
+            return [
+              i > 0 && (
+                <div key={"aconn-" + round} style={{ display: "flex", flexDirection: "column", flex: `0 0 ${CONN_W}px`, width: CONN_W }}>
+                  <div style={{ height: HEADER_H }} />
+                  <svg width={CONN_W} height={BRACKET_H} style={{ display: "block" }}>
+                    {connEntries.map(([parentId, [feedAId, feedBId]]) => {
+                      const ay = matchCenterY(feedAId);
+                      const by = matchCenterY(feedBId);
+                      const py = matchCenterY(parentId);
+                      return (
+                        <g key={parentId}>
+                          <path d={`M 0 ${ay} H ${mid} V ${by} H 0`} fill="none" stroke="var(--line)" strokeWidth={1.5} strokeLinejoin="round" />
+                          <path d={`M ${mid} ${py} H ${CONN_W}`} fill="none" stroke="var(--line)" strokeWidth={1.5} />
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              ),
+              <div key={"acol-" + round} style={{ display: "flex", flexDirection: "column", flex: "0 0 140px", width: 140 }}>
+                <div style={{ fontFamily: "var(--display)", fontSize: 9, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", height: HEADER_H, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 3, whiteSpace: "nowrap" }}>{ROUND_LABELS[round]}</div>
+                <div style={{ position: "relative", height: BRACKET_H }}>
+                  {ids.map((id) => (
+                    <div key={id} style={{ position: "absolute", top: matchCenterY(id) - CELL_H / 2, left: 0, right: 0, zIndex: editing === id ? 20 : 1 }}>
+                      <AdminCell id={id} />
+                    </div>
+                  ))}
+                </div>
+              </div>,
+            ];
+          }).filter(Boolean)}
         </div>
       </div>
     </div>
