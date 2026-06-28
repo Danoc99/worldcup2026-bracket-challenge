@@ -1237,7 +1237,7 @@ function BracketSetupCard({ pw, knockout, reload, setMsg }) {
     return `W of ${a}\nvs\nW of ${b}`;
   }
 
-  function AdminCell({ id, roundLabel }) {
+  function adminCell(id) {
     const isR32 = id.startsWith("R32_");
     const isEditing = editing === id;
     const existing = bracketData[id] || {};
@@ -1318,7 +1318,7 @@ function BracketSetupCard({ pw, knockout, reload, setMsg }) {
                 <div style={{ position: "relative", height: BRACKET_H }}>
                   {ids.map((id) => (
                     <div key={id} style={{ position: "absolute", top: matchCenterY(id) - CELL_H / 2, left: 0, right: 0, zIndex: editing === id ? 20 : 1 }}>
-                      <AdminCell id={id} />
+                      {adminCell(id)}
                     </div>
                   ))}
                 </div>
