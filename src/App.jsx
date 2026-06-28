@@ -743,16 +743,20 @@ function MatchesTab({ matches, meta }) {
       if (!byDate.has(key)) byDate.set(key, []);
       byDate.get(key).push(m);
     }
-    return [...byDate.entries()]
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([key, list]) => ({
-        key,
-        label: new Date(list[0].utcDate).toLocaleDateString("en-US", {
-          timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric",
-        }),
-        matches: list,
-      }));
-  }, [matches]);
+    const toDayObj = ([key, list]) => ({
+      key,
+      label: new Date(list[0].utcDate).toLocaleDateString("en-US", {
+        timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric",
+      }),
+      matches: list,
+    });
+    const entries = [...byDate.entries()];
+    // Today + future: ascending (today first, then upcoming)
+    const upcoming = entries.filter(([k]) => k >= todayKey).sort(([a], [b]) => a.localeCompare(b)).map(toDayObj);
+    // Past: descending (most recent first)
+    const past = entries.filter(([k]) => k < todayKey).sort(([a], [b]) => b.localeCompare(a)).map(toDayObj);
+    return [...upcoming, ...past];
+  }, [matches, todayKey]);
 
   if (matches.length === 0) {
     return <div className="rise"><Empty icon={CalendarDays} title="No fixtures yet" sub="The schedule will appear once football-data publishes it." /></div>;
