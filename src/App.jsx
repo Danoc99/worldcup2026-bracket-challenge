@@ -744,7 +744,7 @@ function MatchesTab({ matches, meta }) {
       byDate.get(key).push(m);
     }
     return [...byDate.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([a], [b]) => b.localeCompare(a))
       .map(([key, list]) => ({
         key,
         label: new Date(list[0].utcDate).toLocaleDateString("en-US", {
