@@ -1,5 +1,6 @@
 // Tiny shared helpers used by the Pages Functions.
 export const LOCK_ISO = "2026-06-11T16:00:00Z"; // group stage kicks off
+export const KNOCKOUT_LOCK_ISO = "2026-06-28T19:00:00Z"; // first R32 kickoff (3 PM EDT)
 
 export function hashStr(s) {
   let h = 5381;

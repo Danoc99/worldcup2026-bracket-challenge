@@ -11,7 +11,7 @@
 // so we still get something even if /standings is unavailable for the comp type.
 
 import { mapTeam } from "./teamMap.js";
-import { scoreGroup } from "./scoring.js";
+import { scoreGroup, scoreKnockout } from "./scoring.js";
 
 const GAMES_PER_TEAM = 3;
 
@@ -22,16 +22,16 @@ const GAMES_PER_TEAM = 3;
 // snapshot ranks aligned with the position numbers the user actually sees is
 // what the movement chip's "moved up/down N spots" delta is measured against.
 //
-// entries: [{ name, predictions }] — entries without a predictions object are skipped
-//          entirely (they're "no-shows" rather than "tied at 0", same convention
-//          as tallyPicks in src/data.js).
-// groups:  { A: { order, status }, ... } — same shape used by state.js. Groups
-//          with status "pending" contribute 0 (matches the StandingsTab UI: it
-//          skips pending groups when totaling).
+// entries:        [{ name, predictions }] — skipped if no predictions object.
+// groups:         { A: { order, status }, ... } — pending groups contribute 0.
+// knockoutPicks:  { "<slug>": { R32_1: "France", ... } } — optional; added to total when present.
+// knockoutResults: { R32_1: { winner: "France", status: "final" }, ... } — optional.
 // Returns: [{ name, total, rank }] sorted by total desc, then name asc.
-export function rankPlayers(entries, groups) {
+export function rankPlayers(entries, groups, knockoutPicks, knockoutResults) {
   const list = Array.isArray(entries) ? entries : [];
   const g = groups || {};
+  const kPicks = knockoutPicks || {};
+  const kResults = knockoutResults || {};
   const rows = [];
   for (const e of list) {
     if (!e || !e.predictions) continue;
@@ -40,10 +40,16 @@ export function rankPlayers(entries, groups) {
       if (!gr || gr.status === "pending") continue;
       total += scoreGroup(e.predictions[letter], gr.order);
     }
+    const s = slugStr(e.name);
+    if (kPicks[s]) total += scoreKnockout(kPicks[s], kResults);
     rows.push({ name: e.name, total });
   }
   rows.sort((a, b) => b.total - a.total || String(a.name).localeCompare(String(b.name)));
   return rows.map((r, i) => ({ name: r.name, total: r.total, rank: i + 1 }));
+}
+
+function slugStr(s) {
+  return String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
 }
 
 // Given two player snapshots (older first, newer second), returns
@@ -308,6 +314,62 @@ export function matchesFromFeed(json) {
     return ad - bd;
   });
   return { matches: out, unmapped };
+}
+
+// Maps football-data stage strings to our bracket round IDs.
+const STAGE_TO_ROUND = {
+  LAST_32: "R32", ROUND_OF_32: "R32",
+  LAST_16: "R16", ROUND_OF_16: "R16",
+  QUARTER_FINALS: "QF", QUARTER_FINAL: "QF",
+  SEMI_FINALS: "SF", SEMI_FINAL: "SF",
+  FINAL: "FINAL",
+};
+
+// Parse knockout fixtures from football-data into a flat results map.
+// Returns { results: { R32_1: { home, away, winner, status }, ... }, unmapped }.
+// Matches are numbered within each round in chronological order of utcDate.
+// Only includes rounds we score (R32 through Final); 3rd-place playoff excluded.
+export function bracketFromFeed(json) {
+  const matches = (json && json.matches) || [];
+  const unmapped = [];
+  const byRound = {}; // round → [{ home, away, winner, status, utcDate }]
+
+  for (const m of matches) {
+    const round = STAGE_TO_ROUND[m.stage];
+    if (!round) continue; // skip GROUP_STAGE, THIRD_PLACE, unknown
+    if (m.stage === "THIRD_PLACE" || m.stage === "PLAY_OFF_3RD_PLACE") continue;
+
+    const home = mapTeam(m.homeTeam?.name, m.homeTeam?.tla);
+    const away = mapTeam(m.awayTeam?.name, m.awayTeam?.tla);
+    // TBD slots (placeholder names from the feed) → null rather than unmapped
+    const homeName = home || (m.homeTeam?.name ? null : null);
+    const awayName = away || (m.awayTeam?.name ? null : null);
+    if (m.homeTeam?.name && !home) unmapped.push(m.homeTeam.name);
+    if (m.awayTeam?.name && !away) unmapped.push(m.awayTeam.name);
+
+    const finished = m.status === "FINISHED";
+    const hs = finished ? (m.score?.fullTime?.home ?? null) : null;
+    const as_ = finished ? (m.score?.fullTime?.away ?? null) : null;
+    const winner = finished && hs != null && as_ != null
+      ? (hs > as_ ? home : hs < as_ ? away : null) // null on draw (shouldn't happen in KO)
+      : null;
+    const status = finished ? "final" : (m.status === "IN_PROGRESS" || m.status === "PAUSED") ? "live" : "scheduled";
+
+    byRound[round] ||= [];
+    byRound[round].push({ home: homeName, away: awayName, winner, status, utcDate: m.utcDate || "" });
+  }
+
+  // Sort each round chronologically then assign sequential IDs: R32_1, R32_2, …
+  const results = {};
+  for (const [round, list] of Object.entries(byRound)) {
+    list.sort((a, b) => a.utcDate.localeCompare(b.utcDate));
+    list.forEach((entry, i) => {
+      const id = round === "FINAL" ? "FINAL" : `${round}_${i + 1}`;
+      results[id] = { home: entry.home, away: entry.away, winner: entry.winner, status: entry.status };
+    });
+  }
+
+  return { results, unmapped: [...new Set(unmapped)] };
 }
 
 export function ordersFromMatches(json) {

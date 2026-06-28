@@ -20,4 +20,10 @@ export const api = {
     req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, action: "deleteEntry", name }) }),
   adminSetMatchScore: (adminPassword, matchId, home, away) =>
     req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, action: "setMatchScore", matchId, home, away }) }),
+  submitKnockout: (name, pin, picks) =>
+    req("/api/knockout", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, pin, picks }) }),
+  adminSetBracketMatch: (adminPassword, matchId, home, away) =>
+    req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, action: "setBracketMatch", matchId, home, away }) }),
+  adminSetKnockoutResult: (adminPassword, matchId, winner, status) =>
+    req("/api/admin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ adminPassword, action: "setKnockoutResult", matchId, winner, status }) }),
 };
