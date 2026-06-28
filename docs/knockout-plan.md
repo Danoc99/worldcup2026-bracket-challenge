@@ -3,8 +3,9 @@
 Drafted 2026-06-07 (group stage hasn't started yet; written ahead of time so the
 implementation crunch on the R32 reveal day is mostly mechanical, not deliberative).
 
-**Status:** draft — open questions at the bottom must be resolved before code lands.
-Once approved, treat changes as new decisions, not refinements.
+**Status:** shipped — implemented via PRs #40–44 (merged 2026-06-27/28). This doc
+is now historical reference; see CLAUDE.md "Recently shipped" for the authoritative
+record of what actually landed.
 
 ## Timing
 
