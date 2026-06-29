@@ -464,7 +464,7 @@ function PosBadge({ idx, small }) {
 // FINAL center, SF right, QF right, R16 right, R32 right.
 // Left half: R32_1-8, R16_1-4, QF_1-2, SF_1
 // Right half: SF_2, QF_3-4, R16_5-8, R32_9-16 (rendered right→left so they converge)
-const CELL_H = 92;   // px per R32 slot (determines all vertical spacing)
+const CELL_H = 108;  // px per R32 slot — accounts for two team rows + pick tab
 const BRACKET_H = 16 * CELL_H; // 1152px total bracket height
 const COL_W = 148;
 const CONN_W = 32;
@@ -669,71 +669,72 @@ function BracketConnector({ toRound }) {
 
 function BracketMatchCell({ id, round, bracket, picks, onPick }) {
   const match = bracket[id] || {};
-  // Derive home/away team for R16+ from the bracket tree + winners of feeder matches.
   let home = match.home || null;
   let away = match.away || null;
-  let homeElimBefore = false;
-  let awayElimBefore = false;
   if (BRACKET_TREE[id]) {
     const [feedA, feedB] = BRACKET_TREE[id];
-    const feedAWinner = bracket[feedA]?.winner || null;
-    const feedBWinner = bracket[feedB]?.winner || null;
-    // Prefer the player's pick so the bracket shows their prediction, not the actual winner.
-    // This mirrors ESPN Tournament Challenge: wrong picks advance in the tree with a strikethrough.
-    home = picks[feedA] || feedAWinner || null;
-    away = picks[feedB] || feedBWinner || null;
-    homeElimBefore = !!feedAWinner && home !== feedAWinner;
-    awayElimBefore = !!feedBWinner && away !== feedBWinner;
+    // Actual winner advances; fall back to player's pick for undecided feeder matches.
+    home = bracket[feedA]?.winner || picks[feedA] || null;
+    away = bracket[feedB]?.winner || picks[feedB] || null;
   }
 
-  const winner = match.winner || null;  // actual confirmed winner
+  const winner = match.winner || null;
   const myPick = picks[id] || null;
-  const isFinal = match.status === "final";
   const isLive = match.status === "live";
+  const pickCorrect = !!(winner && myPick && winner === myPick);
+  const pickWrong = !!(winner && myPick && winner !== myPick);
 
-  function TeamRow({ team, side, elimBefore }) {
+  function TeamRow({ team, side }) {
     if (!team) return (
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: side === "home" ? "1px solid var(--line)" : "none", opacity: .4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: side === "home" ? "1px solid var(--line)" : "none", opacity: .4 }}>
         <span style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>TBD</span>
       </div>
     );
-    const isWinner = winner && winner === team;
-    const isEliminated = winner && winner !== team;
-    const isMyPick = myPick === team;
-    const pickCorrect = isMyPick && isWinner;
-    const pickWrong = isMyPick && isEliminated;
-    const canPick = !!onPick && !winner && !elimBefore;
+    const isWinner = !!(winner && winner === team);
+    const isEliminated = !!(winner && winner !== team);
+    const canPick = !!onPick && !winner;
     return (
       <div
         onClick={() => canPick && onPick(id, team)}
         style={{
-          display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+          display: "flex", alignItems: "center", gap: 6, padding: "7px 10px",
           borderBottom: side === "home" ? "1px solid var(--line)" : "none",
           cursor: canPick ? "pointer" : "default",
-          background: isMyPick && !winner && !elimBefore ? "rgba(31,181,116,.12)" : "transparent",
-          opacity: (isEliminated || elimBefore) ? .45 : 1,
+          opacity: isEliminated ? .45 : 1,
           borderRadius: side === "home" ? "8px 8px 0 0" : "0 0 8px 8px",
           transition: "background .1s ease",
         }}
         className={canPick ? "grouprow" : ""}
       >
         <span style={{ fontSize: 15 }}>{FLAG[team] || "🏳️"}</span>
-        <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          textDecoration: elimBefore ? "line-through" : "none",
-          color: pickCorrect ? "var(--green)" : (pickWrong || elimBefore) ? "var(--red)" : "var(--text)" }}>
+        <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text)" }}>
           {team}
         </span>
-        {pickCorrect && <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />}
-        {(pickWrong || elimBefore) && <X size={11} style={{ color: "var(--red)", flexShrink: 0 }} />}
-        {isMyPick && !winner && !elimBefore && <span style={{ fontSize: 9, color: "var(--pitch)", fontWeight: 800, flexShrink: 0 }}>✓</span>}
       </div>
     );
   }
 
   return (
     <div style={{ background: "var(--card)", border: `1px solid ${isLive ? "rgba(230,57,70,.4)" : "var(--line)"}`, borderRadius: 8, margin: "2px 4px", overflow: "hidden" }}>
-      <TeamRow team={home} side="home" elimBefore={homeElimBefore} />
-      <TeamRow team={away} side="away" elimBefore={awayElimBefore} />
+      <TeamRow team={home} side="home" />
+      <TeamRow team={away} side="away" />
+      {myPick && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 4, padding: "3px 8px 4px",
+          borderTop: "1px solid var(--line)",
+          background: pickCorrect ? "rgba(31,181,116,.1)" : pickWrong ? "rgba(230,57,70,.1)" : "rgba(255,255,255,.03)",
+        }}>
+          <span style={{ fontSize: 8, color: "var(--muted)", fontWeight: 700, letterSpacing: 0.5, flexShrink: 0 }}>PICK</span>
+          <span style={{ fontSize: 11, flexShrink: 0 }}>{FLAG[myPick] || "🏳️"}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            color: pickCorrect ? "var(--green)" : pickWrong ? "var(--red)" : "var(--muted)",
+            textDecoration: pickWrong ? "line-through" : "none",
+          }}>{myPick}</span>
+          {pickCorrect && <Check size={9} style={{ color: "var(--green)", flexShrink: 0 }} />}
+          {pickWrong && <X size={9} style={{ color: "var(--red)", flexShrink: 0 }} />}
+        </div>
+      )}
       {isLive && <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 1, color: "var(--red)", textAlign: "center", padding: "2px 0" }}>LIVE</div>}
     </div>
   );
