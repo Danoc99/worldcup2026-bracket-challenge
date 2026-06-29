@@ -672,10 +672,18 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
   // Derive home/away team for R16+ from the bracket tree + winners of feeder matches.
   let home = match.home || null;
   let away = match.away || null;
+  let homeElimBefore = false;
+  let awayElimBefore = false;
   if (BRACKET_TREE[id]) {
     const [feedA, feedB] = BRACKET_TREE[id];
-    home = bracket[feedA]?.winner || picks[feedA] || null;
-    away = bracket[feedB]?.winner || picks[feedB] || null;
+    const feedAWinner = bracket[feedA]?.winner || null;
+    const feedBWinner = bracket[feedB]?.winner || null;
+    // Prefer the player's pick so the bracket shows their prediction, not the actual winner.
+    // This mirrors ESPN Tournament Challenge: wrong picks advance in the tree with a strikethrough.
+    home = picks[feedA] || feedAWinner || null;
+    away = picks[feedB] || feedBWinner || null;
+    homeElimBefore = !!feedAWinner && home !== feedAWinner;
+    awayElimBefore = !!feedBWinner && away !== feedBWinner;
   }
 
   const winner = match.winner || null;  // actual confirmed winner
@@ -683,7 +691,7 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
   const isFinal = match.status === "final";
   const isLive = match.status === "live";
 
-  function TeamRow({ team, side }) {
+  function TeamRow({ team, side, elimBefore }) {
     if (!team) return (
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px", borderBottom: side === "home" ? "1px solid var(--line)" : "none", opacity: .4 }}>
         <span style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>TBD</span>
@@ -694,7 +702,7 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
     const isMyPick = myPick === team;
     const pickCorrect = isMyPick && isWinner;
     const pickWrong = isMyPick && isEliminated;
-    const canPick = !!onPick && !winner; // can only pick live/unplayed matches
+    const canPick = !!onPick && !winner && !elimBefore;
     return (
       <div
         onClick={() => canPick && onPick(id, team)}
@@ -702,8 +710,8 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
           display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
           borderBottom: side === "home" ? "1px solid var(--line)" : "none",
           cursor: canPick ? "pointer" : "default",
-          background: isMyPick && !winner ? "rgba(31,181,116,.12)" : "transparent",
-          opacity: isEliminated ? .45 : 1,
+          background: isMyPick && !winner && !elimBefore ? "rgba(31,181,116,.12)" : "transparent",
+          opacity: (isEliminated || elimBefore) ? .45 : 1,
           borderRadius: side === "home" ? "8px 8px 0 0" : "0 0 8px 8px",
           transition: "background .1s ease",
         }}
@@ -711,20 +719,21 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
       >
         <span style={{ fontSize: 15 }}>{FLAG[team] || "🏳️"}</span>
         <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          color: pickCorrect ? "var(--green)" : pickWrong ? "var(--red)" : "var(--text)" }}>
+          textDecoration: elimBefore ? "line-through" : "none",
+          color: pickCorrect ? "var(--green)" : (pickWrong || elimBefore) ? "var(--red)" : "var(--text)" }}>
           {team}
         </span>
         {pickCorrect && <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />}
-        {pickWrong && <X size={11} style={{ color: "var(--red)", flexShrink: 0 }} />}
-        {isMyPick && !winner && <span style={{ fontSize: 9, color: "var(--pitch)", fontWeight: 800, flexShrink: 0 }}>✓</span>}
+        {(pickWrong || elimBefore) && <X size={11} style={{ color: "var(--red)", flexShrink: 0 }} />}
+        {isMyPick && !winner && !elimBefore && <span style={{ fontSize: 9, color: "var(--pitch)", fontWeight: 800, flexShrink: 0 }}>✓</span>}
       </div>
     );
   }
 
   return (
     <div style={{ background: "var(--card)", border: `1px solid ${isLive ? "rgba(230,57,70,.4)" : "var(--line)"}`, borderRadius: 8, margin: "2px 4px", overflow: "hidden" }}>
-      <TeamRow team={home} side="home" />
-      <TeamRow team={away} side="away" />
+      <TeamRow team={home} side="home" elimBefore={homeElimBefore} />
+      <TeamRow team={away} side="away" elimBefore={awayElimBefore} />
       {isLive && <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 1, color: "var(--red)", textAlign: "center", padding: "2px 0" }}>LIVE</div>}
     </div>
   );
