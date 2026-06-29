@@ -464,7 +464,7 @@ function PosBadge({ idx, small }) {
 // FINAL center, SF right, QF right, R16 right, R32 right.
 // Left half: R32_1-8, R16_1-4, QF_1-2, SF_1
 // Right half: SF_2, QF_3-4, R16_5-8, R32_9-16 (rendered right→left so they converge)
-const CELL_H = 72;   // px per R32 slot (determines all vertical spacing)
+const CELL_H = 82;   // px per R32 slot (determines all vertical spacing)
 const BRACKET_H = 16 * CELL_H; // 1152px total bracket height
 const COL_W = 148;
 const CONN_W = 32;
@@ -570,7 +570,7 @@ function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
             const on = s === viewingSlug;
             const isMe = s === mySlug;
             return (
-              <button key={s} className="btn" onClick={() => setViewingSlug(s)} style={{ padding: "7px 14px", fontSize: 13, background: on ? "linear-gradient(110deg,#1fb574,#f5c542)" : "var(--card)", color: on ? "#0b1410" : "var(--text)", border: on ? "none" : "1px solid var(--line)", borderRadius: 999 }}>
+              <button key={s} className="btn" onClick={() => setViewingSlug(s)} style={{ padding: "7px 14px", fontSize: 13, background: on ? "linear-gradient(110deg,#1fb574,#f5c542)" : "var(--card)", color: on ? "#0b1410" : "var(--text)", border: on ? "none" : "1px solid var(--line)", borderRadius: 999, touchAction: "manipulation" }}>
                 {e.name}{isMe ? " · you" : ""}
               </button>
             );
@@ -711,7 +711,7 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
       >
         <span style={{ fontSize: 15 }}>{FLAG[team] || "🏳️"}</span>
         <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          color: pickCorrect ? "var(--green)" : pickWrong ? "var(--red)" : isWinner ? "var(--gold)" : "var(--text)" }}>
+          color: pickCorrect ? "var(--green)" : pickWrong ? "var(--red)" : "var(--text)" }}>
           {team}
         </span>
         {pickCorrect && <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />}
