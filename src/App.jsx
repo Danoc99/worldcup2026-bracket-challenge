@@ -464,7 +464,7 @@ function PosBadge({ idx, small }) {
 // FINAL center, SF right, QF right, R16 right, R32 right.
 // Left half: R32_1-8, R16_1-4, QF_1-2, SF_1
 // Right half: SF_2, QF_3-4, R16_5-8, R32_9-16 (rendered right→left so they converge)
-const CELL_H = 82;   // px per R32 slot (determines all vertical spacing)
+const CELL_H = 92;   // px per R32 slot (determines all vertical spacing)
 const BRACKET_H = 16 * CELL_H; // 1152px total bracket height
 const COL_W = 148;
 const CONN_W = 32;
@@ -692,8 +692,8 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
     const isWinner = winner && winner === team;
     const isEliminated = winner && winner !== team;
     const isMyPick = myPick === team;
-    const pickCorrect = isFinal && isMyPick && isWinner;
-    const pickWrong = isFinal && isMyPick && isEliminated;
+    const pickCorrect = isMyPick && isWinner;
+    const pickWrong = isMyPick && isEliminated;
     const canPick = !!onPick && !winner; // can only pick live/unplayed matches
     return (
       <div
@@ -702,7 +702,7 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
           display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
           borderBottom: side === "home" ? "1px solid var(--line)" : "none",
           cursor: canPick ? "pointer" : "default",
-          background: isMyPick && !isFinal ? "rgba(31,181,116,.12)" : "transparent",
+          background: isMyPick && !winner ? "rgba(31,181,116,.12)" : "transparent",
           opacity: isEliminated ? .45 : 1,
           borderRadius: side === "home" ? "8px 8px 0 0" : "0 0 8px 8px",
           transition: "background .1s ease",
@@ -716,7 +716,7 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
         </span>
         {pickCorrect && <Check size={11} style={{ color: "var(--green)", flexShrink: 0 }} />}
         {pickWrong && <X size={11} style={{ color: "var(--red)", flexShrink: 0 }} />}
-        {isMyPick && !isFinal && <span style={{ fontSize: 9, color: "var(--pitch)", fontWeight: 800, flexShrink: 0 }}>✓</span>}
+        {isMyPick && !winner && <span style={{ fontSize: 9, color: "var(--pitch)", fontWeight: 800, flexShrink: 0 }}>✓</span>}
       </div>
     );
   }
