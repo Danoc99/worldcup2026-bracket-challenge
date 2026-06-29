@@ -1,5 +1,5 @@
 export const LOCK_ISO = "2026-06-11T16:00:00Z";
-export const KNOCKOUT_LOCK_ISO = "2026-06-28T22:10:00Z"; // temporarily reopened ~1hr window
+export const KNOCKOUT_LOCK_ISO = "2026-06-28T19:00:00Z"; // picks locked; R32 window closed
 
 export const GROUPS = {
   A: ["Mexico", "South Korea", "South Africa", "Czechia"],

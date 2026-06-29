@@ -1043,7 +1043,10 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
 
   // Inconsistent pick: pick Spain for R16_1 but picked France and Brazil for R32_1/R32_2.
   {
+    const origNow = Date;
+    global.Date = class extends Date { constructor(...a) { super(...a); } static now() { return new globalThis.Date(KNOCKOUT_LOCK_ISO).getTime() - 60000; } };
     const r = await knockoutPost({ request: req({ name, pin, picks: { R32_1: "France", R32_2: "Brazil", R16_1: "Spain" } }), env });
+    global.Date = origNow;
     ok("knockout API: inconsistent R16 pick → 400", r.status === 400);
   }
 }
