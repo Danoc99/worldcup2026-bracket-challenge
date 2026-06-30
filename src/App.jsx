@@ -176,6 +176,26 @@ function HelpPanel({ onClose }) {
         </div>
 
         <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>How to read the bracket</div>
+          <p style={{ color: "var(--muted)", fontSize: 15, margin: "0 0 10px", lineHeight: 1.55 }}>The bracket always shows the actual match result — winner bold, loser dimmed. Each cell also has a <b style={{ color: "var(--text)" }}>PICK</b> strip at the bottom showing your predicted winner for that match:</p>
+          <div style={{ display: "grid", gap: 8, marginBottom: 10 }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, color: "var(--muted)" }}>
+              <span style={{ color: "var(--green)", fontWeight: 800, minWidth: 16, flexShrink: 0 }}>✓</span>
+              <span><b style={{ color: "var(--green)" }}>Green</b> — correct pick. Points earned.</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, color: "var(--muted)" }}>
+              <span style={{ color: "var(--red)", fontWeight: 800, minWidth: 16, flexShrink: 0 }}>✗</span>
+              <span><b style={{ color: "var(--red)" }}>Red strikethrough</b> — wrong pick. Also shows when the team you picked was already eliminated in an earlier round and can no longer reach this match.</span>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 14, color: "var(--muted)" }}>
+              <span style={{ fontWeight: 800, minWidth: 16, flexShrink: 0 }}>···</span>
+              <span><b style={{ color: "var(--muted)" }}>Muted</b> — match not yet played.</span>
+            </div>
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: 14, margin: 0, lineHeight: 1.55 }}>If your picked team appears in a later round but has already been eliminated, their name shows in red with a strikethrough in that cell too — so dead picks are obvious at a glance.</p>
+        </div>
+
+        <div style={{ background: "var(--card)", border: "1px solid var(--line)", borderRadius: 12, padding: "16px 18px", marginBottom: 12 }}>
           <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 8 }}>Example — you picked Brazil 1st</div>
           <ul style={{ color: "var(--muted)", fontSize: 15, margin: 0, paddingLeft: 22, lineHeight: 1.75 }}>
             <li>Brazil finishes 1st → <b style={{ color: "var(--green)" }}>25 pts</b></li>
@@ -560,6 +580,16 @@ function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
   const displaySlug = knockoutLocked ? viewingSlug : mySlug;
   const displayPicks = (knockoutLocked ? picksBySlug[displaySlug] : myPicks) || {};
 
+  // Teams that have been knocked out anywhere in the tournament (used to mark dead picks).
+  const eliminatedTeams = useMemo(() => {
+    const s = new Set();
+    for (const id of ALL_MATCH_IDS) {
+      const m = bracket[id] || {};
+      if (m.winner && m.home && m.away) s.add(m.winner === m.home ? m.away : m.home);
+    }
+    return s;
+  }, [bracket]);
+
   return (
     <div className="rise">
       {/* Player selector — only after lock */}
@@ -595,7 +625,7 @@ function BracketTab({ me, knockout, knockoutLocked, entries, reload }) {
         <div style={{ display: "flex", alignItems: "flex-start", minWidth: ALL_ROUNDS.length * COL_W + (ALL_ROUNDS.length - 1) * CONN_W }}>
           {ALL_ROUNDS.flatMap(({ round, ids }, i) => [
             i > 0 && <BracketConnector key={"conn-" + round} toRound={round} />,
-            <BracketColumn key={"col-" + round} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} />,
+            <BracketColumn key={"col-" + round} round={round} ids={ids} bracket={bracket} picks={displayPicks} onPick={knockoutLocked ? null : pickWinner} eliminatedTeams={eliminatedTeams} />,
           ]).filter(Boolean)}
         </div>
       </div>
@@ -625,7 +655,7 @@ function clearDownstream(picks, changedId, oldWinner) {
   }
 }
 
-function BracketColumn({ round, ids, bracket, picks, onPick }) {
+function BracketColumn({ round, ids, bracket, picks, onPick, eliminatedTeams }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: `0 0 ${COL_W}px`, width: COL_W }}>
       <div style={{ fontFamily: "var(--display)", fontSize: 10, letterSpacing: 1.5, color: "var(--muted)", textAlign: "center", height: HEADER_H, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 3, whiteSpace: "nowrap" }}>
@@ -634,7 +664,7 @@ function BracketColumn({ round, ids, bracket, picks, onPick }) {
       <div style={{ position: "relative", height: BRACKET_H }}>
         {ids.map((id) => (
           <div key={id} style={{ position: "absolute", top: matchCenterY(id) - CELL_H / 2, left: 0, right: 0 }}>
-            <BracketMatchCell id={id} round={round} bracket={bracket} picks={picks} onPick={onPick} />
+            <BracketMatchCell id={id} round={round} bracket={bracket} picks={picks} onPick={onPick} eliminatedTeams={eliminatedTeams} />
           </div>
         ))}
       </div>
@@ -667,24 +697,32 @@ function BracketConnector({ toRound }) {
   );
 }
 
-function BracketMatchCell({ id, round, bracket, picks, onPick }) {
+function BracketMatchCell({ id, round, bracket, picks, onPick, eliminatedTeams = new Set() }) {
   const match = bracket[id] || {};
   let home = match.home || null;
   let away = match.away || null;
+  let homeDeadPick = false; // player's pick advanced here but was already eliminated
+  let awayDeadPick = false;
   if (BRACKET_TREE[id]) {
     const [feedA, feedB] = BRACKET_TREE[id];
-    // Actual winner advances; fall back to player's pick for undecided feeder matches.
-    home = bracket[feedA]?.winner || picks[feedA] || null;
-    away = bracket[feedB]?.winner || picks[feedB] || null;
+    const feedAWinner = bracket[feedA]?.winner || null;
+    const feedBWinner = bracket[feedB]?.winner || null;
+    home = feedAWinner || picks[feedA] || null;
+    away = feedBWinner || picks[feedB] || null;
+    // If a team advanced via pick (no confirmed winner) but is globally eliminated, flag it.
+    homeDeadPick = !feedAWinner && !!home && eliminatedTeams.has(home);
+    awayDeadPick = !feedBWinner && !!away && eliminatedTeams.has(away);
   }
 
   const winner = match.winner || null;
   const myPick = picks[id] || null;
   const isLive = match.status === "live";
-  const pickCorrect = !!(winner && myPick && winner === myPick);
-  const pickWrong = !!(winner && myPick && winner !== myPick);
+  // Pick is wrong if: (a) match decided and pick didn't win, or (b) match undecided but pick
+  // was already knocked out earlier in the tournament.
+  const pickCorrect = !!(myPick && winner && winner === myPick);
+  const pickWrong = !!(myPick && (winner ? winner !== myPick : eliminatedTeams.has(myPick)));
 
-  function TeamRow({ team, side }) {
+  function TeamRow({ team, side, deadPick }) {
     if (!team) return (
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", borderBottom: side === "home" ? "1px solid var(--line)" : "none", opacity: .4 }}>
         <span style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic" }}>TBD</span>
@@ -692,7 +730,8 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
     );
     const isWinner = !!(winner && winner === team);
     const isEliminated = !!(winner && winner !== team);
-    const canPick = !!onPick && !winner;
+    const isDead = deadPick || (isEliminated && !winner); // dimmed if eliminated here or ghost pick
+    const canPick = !!onPick && !winner && !deadPick;
     return (
       <div
         onClick={() => canPick && onPick(id, team)}
@@ -700,14 +739,16 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
           display: "flex", alignItems: "center", gap: 6, padding: "7px 10px",
           borderBottom: side === "home" ? "1px solid var(--line)" : "none",
           cursor: canPick ? "pointer" : "default",
-          opacity: isEliminated ? .45 : 1,
+          opacity: (isEliminated || deadPick) ? .45 : 1,
           borderRadius: side === "home" ? "8px 8px 0 0" : "0 0 8px 8px",
           transition: "background .1s ease",
         }}
         className={canPick ? "grouprow" : ""}
       >
         <span style={{ fontSize: 15 }}>{FLAG[team] || "🏳️"}</span>
-        <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text)" }}>
+        <span style={{ fontSize: 12, fontWeight: isWinner ? 800 : 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          color: deadPick ? "var(--red)" : "var(--text)",
+          textDecoration: deadPick ? "line-through" : "none" }}>
           {team}
         </span>
       </div>
@@ -716,8 +757,8 @@ function BracketMatchCell({ id, round, bracket, picks, onPick }) {
 
   return (
     <div style={{ background: "var(--card)", border: `1px solid ${isLive ? "rgba(230,57,70,.4)" : "var(--line)"}`, borderRadius: 8, margin: "2px 4px", overflow: "hidden" }}>
-      <TeamRow team={home} side="home" />
-      <TeamRow team={away} side="away" />
+      <TeamRow team={home} side="home" deadPick={homeDeadPick} />
+      <TeamRow team={away} side="away" deadPick={awayDeadPick} />
       {myPick && (
         <div style={{
           display: "flex", alignItems: "center", gap: 4, padding: "3px 8px 4px",
@@ -857,6 +898,17 @@ function StandingsTab({ entries, groups, knockout, knockoutLocked, meta, locked,
   const allPending = pendingCount > 0 && !anyResults;
 
   const { bracket: koBracket, picksBySlug: koPicks } = knockout || {};
+
+  // Teams eliminated anywhere in the knockout bracket — used to mark dead picks.
+  const eliminatedTeams = useMemo(() => {
+    const s = new Set();
+    for (const id of ALL_MATCH_IDS) {
+      const m = (koBracket || {})[id] || {};
+      if (m.winner && m.home && m.away) s.add(m.winner === m.home ? m.away : m.home);
+    }
+    return s;
+  }, [koBracket]);
+
   const rows = useMemo(() => entries.map((e) => {
     let groupPts = 0;
     GROUP_IDS.forEach((g) => {
@@ -865,8 +917,18 @@ function StandingsTab({ entries, groups, knockout, knockoutLocked, meta, locked,
     });
     const myKoPicks = koPicks?.[slug(e.name)] || {};
     const koPts = scoreKnockout(myKoPicks, koBracket || {});
-    return { ...e, total: groupPts + koPts, groupPts, koPts };
-  }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)), [entries, groups, koBracket, koPicks]);
+    // Max additional knockout points if every remaining live pick is correct.
+    let maxKoRemaining = 0;
+    for (const id of ALL_MATCH_IDS) {
+      const m = (koBracket || {})[id] || {};
+      if (m.winner) continue;
+      const pick = myKoPicks[id];
+      if (!pick || eliminatedTeams.has(pick)) continue;
+      const round = id === "FINAL" ? "FINAL" : id.split("_")[0];
+      maxKoRemaining += KNOCKOUT_SCORES[round];
+    }
+    return { ...e, total: groupPts + koPts, groupPts, koPts, maxKoRemaining };
+  }).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name)), [entries, groups, koBracket, koPicks, eliminatedTeams]);
 
   if (entries.length === 0) return <div className="rise"><Empty icon={Users} title="No entries yet" sub="Be the first — head to My Picks and fill out your bracket." /></div>;
 
@@ -899,6 +961,9 @@ function StandingsTab({ entries, groups, knockout, knockoutLocked, meta, locked,
                     <div style={{ color: "var(--muted)", fontSize: 11 }}>
                       {r.koPts > 0 ? "incl. knockout" : anyLive ? "projected" : `/ ${GROUP_TOTAL_MAX} pts`}
                     </div>
+                    {r.maxKoRemaining > 0 && (
+                      <div style={{ color: "var(--muted)", fontSize: 10, marginTop: 1 }}>max {r.total + r.maxKoRemaining}</div>
+                    )}
                   </div>
                 )}
               </button>
