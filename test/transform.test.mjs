@@ -984,6 +984,33 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   ok("bracketFromFeed: no unmapped teams", unmapped.length === 0);
 }
 
+// bracketFromFeed — score.winner covers ET/penalty shootouts and the null-
+// fullTime race (PR #20 pattern). When fullTime is tied or null but the
+// match is FINISHED, the winner should come from score.winner.
+{
+  const feedJson = {
+    matches: [
+      // Shootout: fullTime tied at 90, score.winner names the away team.
+      { stage: "LAST_32", utcDate: "2026-06-30T19:00:00Z", status: "FINISHED",
+        homeTeam: { name: "United States", tla: "USA" }, awayTeam: { name: "Belgium", tla: "BEL" },
+        score: { winner: "AWAY_TEAM", duration: "PENALTY_SHOOTOUT",
+                 fullTime: { home: 2, away: 2 }, penalties: { home: 3, away: 5 } } },
+      // Race: FINISHED with null fullTime but score.winner already set.
+      { stage: "LAST_32", utcDate: "2026-06-30T22:00:00Z", status: "FINISHED",
+        homeTeam: { name: "England", tla: "ENG" }, awayTeam: { name: "Mexico", tla: "MEX" },
+        score: { winner: "HOME_TEAM", fullTime: { home: null, away: null } } },
+      // Clean regulation win with score.winner absent — fullTime fallback still works.
+      { stage: "LAST_32", utcDate: "2026-07-01T19:00:00Z", status: "FINISHED",
+        homeTeam: { name: "Argentina", tla: "ARG" }, awayTeam: { name: "Egypt", tla: "EGY" },
+        score: { fullTime: { home: 3, away: 1 } } },
+    ],
+  };
+  const { results } = bracketFromFeed(feedJson);
+  ok("bracketFromFeed: shootout winner from score.winner (AWAY_TEAM)", results.R32_1?.winner === "Belgium");
+  ok("bracketFromFeed: null-fullTime FINISHED still gets winner from score.winner", results.R32_2?.winner === "England");
+  ok("bracketFromFeed: fullTime fallback still works when score.winner missing", results.R32_3?.winner === "Argentina");
+}
+
 // ─── knockout API — lock behavior ────────────────────────────────────────────
 {
   function makeKvPool(initial = {}) {

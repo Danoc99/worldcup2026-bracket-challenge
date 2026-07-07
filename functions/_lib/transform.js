@@ -348,11 +348,23 @@ export function bracketFromFeed(json) {
     if (m.awayTeam?.name && !away) unmapped.push(m.awayTeam.name);
 
     const finished = m.status === "FINISHED";
+    // Prefer score.winner: football-data v4 sets it to HOME_TEAM/AWAY_TEAM on
+    // FINISHED matches regardless of how the game was decided (regulation, ET,
+    // or shootout), and it's typically set before fullTime lands in the
+    // payload — so this also covers the PR #20 race where the status flips to
+    // FINISHED with null scores. Fall back to fullTime comparison when
+    // score.winner isn't present (older payloads / defensive safety net).
+    const scoreWinner = m.score?.winner || null;
     const hs = finished ? (m.score?.fullTime?.home ?? null) : null;
     const as_ = finished ? (m.score?.fullTime?.away ?? null) : null;
-    const winner = finished && hs != null && as_ != null
-      ? (hs > as_ ? home : hs < as_ ? away : null) // null on draw (shouldn't happen in KO)
-      : null;
+    let winner = null;
+    if (finished) {
+      if (scoreWinner === "HOME_TEAM") winner = home;
+      else if (scoreWinner === "AWAY_TEAM") winner = away;
+      else if (hs != null && as_ != null && hs !== as_) {
+        winner = hs > as_ ? home : away;
+      }
+    }
     const status = finished ? "final" : (m.status === "IN_PROGRESS" || m.status === "PAUSED") ? "live" : "scheduled";
 
     byRound[round] ||= [];
