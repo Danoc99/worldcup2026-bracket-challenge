@@ -3,10 +3,17 @@
 This file is context for Claude Code. Read it before making changes.
 
 ## What this is
-A March-Madness-style World Cup 2026 prediction pool. Players predict the 1→4
-finishing order of all 12 groups; the leaderboard shows projected points that
-update automatically from a live football-data.org feed. Phase 2 (knockout bracket
-picks, R32 → Final) is live as of 2026-06-28.
+A March-Madness-style World Cup 2026 prediction pool. Players predicted the 1→4
+finishing order of all 12 groups plus a full knockout bracket (R32 → Final).
+The leaderboard shows total points auto-computed from the football-data.org feed.
+
+**As of 2026-08-11 the tournament is over and the site is in spectator mode.**
+All write endpoints (`/api/entry`, `/api/knockout`, `/api/admin`) return **410
+Gone**. The frontend has no name/PIN entry, no save buttons, no admin modal —
+it's a read-only viewer for the archived results (portfolio/recruiter-facing).
+If you're asked to re-enable writes, see the security notes in the "Recently
+shipped" section first — the PIN + admin-hash issues need real fixes before
+those endpoints can safely accept POST again.
 
 - Live site: https://dcoworldcup.xyz
 - Repo: https://github.com/Danoc99/worldcup2026-bracket-challenge
@@ -25,39 +32,47 @@ picks, R32 → Final) is live as of 2026-06-28.
 
 ## Architecture
 - **Frontend:** React + Vite.
-  - `src/App.jsx` — entire UI (tabs, picks, standings, admin modal, scoring key).
+  - `src/App.jsx` — entire UI (spectator tabs, player selectors, standings, scoring key).
   - `src/data.js` — GROUPS, FLAG emojis, SCORE_MATRIX, GROUP_TOTAL_MAX, LOCK_ISO, helpers.
-  - `src/api.js` — thin fetch wrappers for the API routes.
+  - `src/api.js` — thin fetch wrappers. Most methods (admin/entry/knockout submit)
+    now point at 410 endpoints; only `getState` is on an active path.
   - `src/main.jsx`, `index.html` — entry point.
 - **Backend:** Cloudflare Pages Functions in `functions/api/`.
   - `state.js`  — GET /api/state: merged config + entries + group orders. Drives the UI.
-  - `setup.js`  — POST /api/setup: one-time pool creation.
-  - `entry.js`  — POST /api/entry: create/update a bracket (PIN-checked, lock-aware).
-  - `admin.js`  — POST /api/admin: verify admin, save manual group overrides, delete a single entry (`action: "deleteEntry"`).
   - `health.js` — GET /api/health: live feed smoke test.
-  - `_lib/` — `util.js` (hash/slug/LOCK_ISO/json), `fd.js` (football-data fetch +
-    cache + serve-stale), `transform.js` (standings/matches → group orders),
-    `teamMap.js` (country-name matcher).
+  - `setup.js`  — POST /api/setup: one-time pool creation. Inert (`config` already exists → 409).
+  - `entry.js` / `knockout.js` / `admin.js` — POST endpoints. **All three return 410
+    Gone** in spectator mode. Do not rewire without fixing the security issues noted
+    in "Recently shipped" first.
+  - `_lib/` — `util.js` (hash/slug/LOCK_ISO/json — `hashStr` is dead code but kept),
+    `fd.js` (football-data fetch + cache + serve-stale), `transform.js`
+    (standings/matches → group orders), `teamMap.js` (country-name matcher).
 - **Storage:** Cloudflare KV via `env.POOL`.
 - **External API:** football-data.org, server-side only, key in `FOOTBALL_DATA_KEY`.
 
 ## Current KV data model (single-pool)
-- `config` — { poolName, adminHash, createdAt }
-- `entry:<slug>` — { name, pin, predictions, updatedAt }
-- `manualResults` — { groups: { A:{order,status}, ... } }  (admin overrides of results)
-- `cache:standings` — cached football-data feed
+- `config` — { poolName, adminHash, createdAt }  (adminHash is dead — see above)
+- `entry:<slug>` — { name, predictions, updatedAt }  (pin field scrubbed 2026-08-11)
+- `knockout:<slug>` — { picks, updatedAt }
+- `knockoutBracket` — { R32_1: {home,away,source}, ... , updatedAt }
+- `manualResults` — { groups: {...}, knockout: {...} }  (frozen — admin disabled)
+- `manualMatchScores` — { "<matchId>": {home,away} }  (frozen — admin disabled)
+- `cache:standings`, `cache:matches`, `cache:knockout` — football-data feed caches
+- `snapshots:groups`, `snapshots:players` — per-matchday movement snapshots
 
 ## Key invariants / decisions
 - **Standings are ONE real tournament, shared by everyone.** The feed cache
-  (`cache:standings`) AND any admin override of group results are **global** — the
-  same for every pool. Group results never differ by pool.
+  (`cache:standings`) is **global** — the same for every pool.
 - Scoring per group: matrix in `src/data.js` (4th place is always 0 by design).
   Mirror any change in ALL THREE: `src/data.js`, `functions/_lib/scoring.js`
   (added by PR #30 so functions/ can rank without importing the frontend), and the test.
-- Lock date: `LOCK_ISO` in `src/data.js` and `functions/_lib/util.js` (keep in sync).
+- Lock dates (`LOCK_ISO`, `KNOCKOUT_LOCK_ISO`) still live in `src/data.js` and
+  `functions/_lib/util.js` (keep in sync) but no longer gate any active code path
+  in spectator mode — the frontend derives no `locked` state from them.
 - Resilience: if football-data fails, `fd.js` serves the last good cache (stale).
-- Security is intentionally light (friends' pool): PINs/admin password are simple.
-  Do NOT harden these unless I explicitly ask — it risks locking out stored entries.
+- The three write endpoints (entry / knockout / admin) return 410 as a hard block.
+  This is the security perimeter — every prior in-code auth check (PIN compare,
+  admin-hash compare) is behind this 410 and no longer reachable.
 
 ## Tests / commands
 - `npm install`
@@ -67,6 +82,7 @@ picks, R32 → Final) is live as of 2026-06-28.
 - `npx wrangler pages dev dist --kv POOL`  → full app + Functions locally
 
 ## Recently shipped
+- **2026-08-11 — Site converted to spectator mode; write endpoints return 410** ([PR #58](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/58), merge `278a9ab`). Tournament is over → site is read-only for portfolio/recruiter viewing. All three write endpoints (`functions/api/entry.js`, `knockout.js`, `admin.js`) return **410 Gone** from POST — no body reading, no auth checks, no KV writes. This incidentally closes two critical security issues that were open on the branch: (1) plaintext PINs in KV were brute-forceable in ≤10,000 requests against /api/entry or /api/knockout with no rate-limiting; (2) the admin password used DJB2 (`hashStr` in `functions/_lib/util.js`), a 32-bit non-cryptographic hash that's trivially collidable. With every write endpoint 410'd, neither hash-check is on an active path. `hashStr` is left in `util.js` as dead code (still imported by `setup.js`, which itself returns 409 since `config` already exists in KV). One-off `scripts/migrate-spectator.mjs` scrubs the plaintext `pin` field from every existing `entry:*` KV record via wrangler kv commands — defense-in-depth since `state.js` already stripped them from responses. **Requires `--remote` on wrangler v4+** or it silently hits the local emulator (fixed by follow-up commit `853c3fe`). Frontend surgery: no name/PIN entry, no save buttons, no drag-and-drop (removed all `@dnd-kit/*` imports from `App.jsx`; deps still in `package.json` — Vite tree-shakes them out of the bundle), no admin modal. Picks/Bracket tabs use a player selector to view any player's locked-in choices. Header replaces the two lock countdowns with a single "Tournament complete — spectator mode" banner; the 1-second `setNow` ticker is gone with it. `src/App.jsx` went 1537 → 882 lines. Tests rewritten to assert 410 on entry/admin/knockout — 145 pass. Default landing tab flipped from `picks` to `standings` since the leaderboard is the interesting artifact post-tournament. **If you're ever tempted to re-enable writes:** the PIN plaintext + admin DJB2 issues need real fixes (bcrypt/scrypt/Argon2 + rate limiting) before those endpoints can accept POST safely. Just deleting the 410 line puts both attack surfaces back.
 - **2026-06-28 — Persist knockout bracket draft picks to localStorage** ([PR #44](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/44), merge `ce7080d`). `myPicks` in `BracketTab` was pure component state. Switching to another tab (Matches, Standings, etc.) unmounts the component and wipes unsaved picks — a real UX problem during the R32 entry window where players want to research while filling out brackets. Fix: on first mount, load from `localStorage` key `wc26_ko_draft_<slug>` if present, falling back to server picks. Any pick change immediately writes to localStorage. Server sync (the `useEffect` that normally re-hydrates from `picksBySlug`) is skipped while a local draft exists, so polling re-renders don't overwrite in-progress work. On successful save, the key is removed and the server copy takes over. No KV, API, or test change.
 - **2026-06-28 — Fix admin bracket dropdown closing every second** ([PR #43](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/43), merge `033ae12`). `AdminCell` was a function component defined inside `BracketSetupCard`. The 1-second `setNow(Date.now())` ticker in `App` (used for the lock countdown) triggers a full re-render every second. Each re-render creates a new `AdminCell` function reference; React interprets a new function type as a different component, unmounts and remounts every instance, and the open `<select>` dropdown closes. Fix: renamed to `adminCell` (lowercase) and call it as `{adminCell(id)}` instead of `<AdminCell id={id} />`. A plain function call is not a component — React just calls it and patches the resulting DOM in place. **General lesson:** never define a function component inside another component body. The same 1-second ticker would silently break any other nested component that holds open UI state (modals, dropdowns, tooltips). Frontend only, no tests.
 - **2026-06-28 — Single-sided bracket with SVG connectors** ([PR #41](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/41), merge `227f1b3`; [PR #42](https://github.com/Danoc99/worldcup2026-bracket-challenge/pull/42), merge `80b5fd3`). PR #41 replaced the plain numbered list in the admin setup card with a visual bracket tree (mirrored left/right layout matching what was live for players). PR #42 converted both the player bracket and admin bracket to a single-sided left-to-right layout (R32 → R16 → QF → SF → Final), matching the ESPN bracket style and making the admin entry flow obvious (R32_1 at top, R32_16 at bottom). Implementation: new `CELL_H = 72`, `BRACKET_H = 16 * CELL_H`, and `matchCenterY(id)` function that maps any match ID to its vertical center using slot math (R32_n: `(n-0.5)×CELL_H`; R16_n: `(2n-1)×CELL_H`; etc.). Cells are rendered with `position: absolute; top: matchCenterY(id) - CELL_H/2` inside a fixed-height column div. `BracketConnector` is a new SVG component that draws classic elbow connectors between rounds: `M 0 feedAY H mid V feedBY H 0` draws the bracket `[` from both feeders, `M mid parentY H CONN_W` exits to the parent match. `LEFT_ROUNDS` and `RIGHT_ROUNDS` constants removed; replaced by a single `ALL_ROUNDS` array. Admin bracket reuses the same `matchCenterY` positioning and the same SVG connectors with absolute-positioned `AdminCell` wrappers; editing cells get `zIndex: 20` so the expanded dropdown floats above adjacent cells. Frontend only, no KV/API/test changes.
@@ -98,17 +114,11 @@ picks, R32 → Final) is live as of 2026-06-28.
 
 ## Backlog
 
-Ordered easiest → hardest. Pick one and propose a plan before coding.
-
-1. **Knockout scoring on Standings.** Phase 2 picks are live but knockout points are
-   not yet surfaced on the Standings tab. Players' total scores should include
-   `scoreKnockout(picks, bracket)` on top of group-stage points, updating in real
-   time as bracket results are entered. Tiebreaker rule (most correct picks weighted
-   by round depth) placeholder is in the Help panel — concrete rule lands here.
-
-2. **Phase 2 bracket — admin result entry UX.** Currently admin enters R32 matchups
-   via the BRACKET SETUP card and winners via the KNOCKOUT RESULTS card. As rounds
-   progress this will need frequent updates. Consider a streamlined flow.
+Empty — the site is in spectator mode. The two prior backlog items (surfacing
+knockout scoring on Standings; streamlined admin result-entry UX) were both
+resolved or moot by the time the tournament ended. Any future work should
+start with a fresh plan, and re-enabling writes requires the security fixes
+noted in the 2026-08-11 shipped entry.
 
 ## Notes
 - README.md is intentionally visitor/recruiter-facing — keep setup/deploy mechanics
