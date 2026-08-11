@@ -23,8 +23,10 @@ const RENAME_TO_NAME = "Kam";
 
 const APPLY = process.argv.includes("--apply");
 
+// --remote is required on wrangler v4+ to hit production KV; without it the
+// CLI targets the local emulator, which returns [] for everything.
 function wrangler(args) {
-  const cmd = `npx wrangler kv ${args} --namespace-id=${NAMESPACE_ID}`;
+  const cmd = `npx wrangler kv ${args} --namespace-id=${NAMESPACE_ID} --remote`;
   return execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
 }
 
@@ -45,7 +47,7 @@ function putValue(key, value) {
   const tmp = `.migrate-${Date.now()}.json`;
   writeFileSync(tmp, json);
   try {
-    execSync(`npx wrangler kv key put "${key}" --path=${tmp} --namespace-id=${NAMESPACE_ID}`, { stdio: "inherit" });
+    execSync(`npx wrangler kv key put "${key}" --path=${tmp} --namespace-id=${NAMESPACE_ID} --remote`, { stdio: "inherit" });
   } finally {
     unlinkSync(tmp);
   }
@@ -53,7 +55,7 @@ function putValue(key, value) {
 
 function deleteKey(key) {
   if (!APPLY) return;
-  execSync(`npx wrangler kv key delete "${key}" --namespace-id=${NAMESPACE_ID}`, { stdio: "inherit" });
+  execSync(`npx wrangler kv key delete "${key}" --namespace-id=${NAMESPACE_ID} --remote`, { stdio: "inherit" });
 }
 
 console.log(`Mode: ${APPLY ? "APPLY" : "DRY RUN"}`);
