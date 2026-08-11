@@ -11,7 +11,6 @@ import { onRequestPost as adminPost } from "../functions/api/admin.js";
 import { onRequestPost as knockoutPost } from "../functions/api/knockout.js";
 import { onRequestGet as stateGet } from "../functions/api/state.js";
 import { writePlayerSnapshot } from "../functions/_lib/fd.js";
-import { LOCK_ISO, KNOCKOUT_LOCK_ISO, hashStr } from "../functions/_lib/util.js";
 import { tallyPicks, scoreKnockout } from "../src/data.js";
 
 // Our canonical groups (must match the front end)
@@ -127,51 +126,21 @@ ok("4th-place row is all zeros", M[3].every((v) => v === 0));
 ok("scrambled top 3 + correct 4th = 25",
    scoreGroup(["United States","Australia","Türkiye","Paraguay"], actual) === 25);
 
-// 6) entry.js — lock behavior. After LOCK_ISO, reject BOTH new entries and edits.
-const LOCK_MS = new Date(LOCK_ISO).getTime();
-const validPreds = Object.fromEntries(Object.entries(GROUPS).map(([L, arr]) => [L, [...arr]]));
-
-async function postEntry({ body, kvData = {}, now }) {
-  const realNow = Date.now;
-  Date.now = () => now;
-  try {
-    const POOL = {
-      get: async (k) => kvData[k] ?? null,
-      put: async (k, v) => { kvData[k] = JSON.parse(v); },
-    };
-    const req = new Request("http://x/api/entry", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const res = await submitEntry({ request: req, env: { POOL } });
-    return { status: res.status, payload: await res.json(), kvData };
-  } finally {
-    Date.now = realNow;
-  }
-}
-
-const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
-
-// before lock: new entry accepted (sanity)
+// 6) entry.js — spectator mode. Every POST returns 410 Gone, no KV writes.
+//    Removes the PIN-check attack surface entirely.
 {
-  const r = await postEntry({ body: baseBody, now: LOCK_MS - 1000 });
-  ok("before lock: new entry accepted (200)", r.status === 200 && r.payload.ok === true);
-  ok("before lock: entry written to KV", !!r.kvData["entry:daniel"]);
-}
-
-// after lock: new entry rejected (the fix for task 2)
-{
-  const r = await postEntry({ body: baseBody, now: LOCK_MS + 1000 });
-  ok("after lock: new entry rejected (423)", r.status === 423);
-  ok("after lock: no KV write for new entry", !r.kvData["entry:daniel"]);
-}
-
-// after lock: edits to existing entries still rejected (regression guard)
-{
-  const kvData = { "entry:daniel": { name: "Daniel", pin: "1234", predictions: validPreds, updatedAt: 0 } };
-  const r = await postEntry({ body: baseBody, kvData, now: LOCK_MS + 1000 });
-  ok("after lock: edit rejected (423)", r.status === 423);
+  const kvData = {};
+  const POOL = {
+    get: async (k) => kvData[k] ?? null,
+    put: async (k, v) => { kvData[k] = JSON.parse(v); },
+  };
+  const req = new Request("http://x/api/entry", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "Daniel", pin: "1234", predictions: {} }),
+  });
+  const res = await submitEntry({ request: req, env: { POOL } });
+  ok("entry.js: POST returns 410 (spectator mode)", res.status === 410);
+  ok("entry.js: no KV write", Object.keys(kvData).length === 0);
 }
 
 // 7) tallyPicks — contrarian/consensus tallies feed the post-lock UI.
@@ -259,61 +228,22 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   ok("matchesFromFeed({matches:[]}) safe", c.matches.length === 0);
 }
 
-// 9) admin.js setMatchScore — safeguard for FINISHED matches that arrive
-//    from the feed with null scores, or admin corrections to a wrong score.
-//    Writes to a new KV key `manualMatchScores` keyed by football-data match id.
+// 9) admin.js — spectator mode. Every POST returns 410 Gone, no KV writes.
+//    Removes the DJB2 hash collision + brute-force attack surface entirely.
 {
-  const ADMIN_PW = "letmein";
-  function makePool(seed = {}) {
-    const kv = { config: { poolName: "p", adminHash: hashStr(ADMIN_PW), createdAt: 0 }, ...seed };
-    return {
-      get: async (k, t) => { const v = kv[k] ?? null; return t === "json" || v == null ? v : JSON.stringify(v); },
-      put: async (k, v) => { kv[k] = JSON.parse(v); },
-      delete: async (k) => { delete kv[k]; },
-      _kv: kv,
-    };
-  }
-  async function adminCall(POOL, body) {
-    const req = new Request("http://x/api/admin", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-    });
-    const res = await adminPost({ request: req, env: { POOL } });
-    return { status: res.status, payload: await res.json() };
-  }
-
-  // Wrong password is rejected before any KV write.
-  {
-    const POOL = makePool();
-    const r = await adminCall(POOL, { adminPassword: "nope", action: "setMatchScore", matchId: 537327, home: 2, away: 1 });
-    ok("setMatchScore: wrong password → 403", r.status === 403);
-    ok("setMatchScore: wrong password → no KV write", POOL._kv.manualMatchScores === undefined);
-  }
-  // Valid write persists under the match id.
-  {
-    const POOL = makePool();
-    const r = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 537327, home: 2, away: 1 });
-    ok("setMatchScore: valid write → 200", r.status === 200 && r.payload.ok === true);
-    ok("setMatchScore: persisted under id", POOL._kv.manualMatchScores?.["537327"]?.home === 2);
-    ok("setMatchScore: persisted away score", POOL._kv.manualMatchScores?.["537327"]?.away === 1);
-  }
-  // Bad payloads rejected (non-integer, negative, missing id).
-  {
-    const POOL = makePool();
-    const bad1 = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 0, home: 1, away: 0 });
-    const bad2 = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 1, home: -1, away: 0 });
-    const bad3 = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 1, home: 1.5, away: 0 });
-    ok("setMatchScore: rejects matchId 0", bad1.status === 400);
-    ok("setMatchScore: rejects negative score", bad2.status === 400);
-    ok("setMatchScore: rejects non-integer score", bad3.status === 400);
-  }
-  // Empty/null clears the override for that match without disturbing others.
-  {
-    const POOL = makePool({ manualMatchScores: { "1": { home: 2, away: 1 }, "2": { home: 0, away: 0 } } });
-    const r = await adminCall(POOL, { adminPassword: ADMIN_PW, action: "setMatchScore", matchId: 1, home: "", away: "" });
-    ok("setMatchScore: clear → 200 with cleared:true", r.status === 200 && r.payload.cleared === true);
-    ok("setMatchScore: cleared entry removed", POOL._kv.manualMatchScores["1"] === undefined);
-    ok("setMatchScore: other entries untouched", POOL._kv.manualMatchScores["2"]?.home === 0);
-  }
+  const kvData = {};
+  const POOL = {
+    get: async (k) => kvData[k] ?? null,
+    put: async (k, v) => { kvData[k] = JSON.parse(v); },
+    delete: async (k) => { delete kvData[k]; },
+  };
+  const req = new Request("http://x/api/admin", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ adminPassword: "anything", action: "verify" }),
+  });
+  const res = await adminPost({ request: req, env: { POOL } });
+  ok("admin.js: POST returns 410 (spectator mode)", res.status === 410);
+  ok("admin.js: no KV write", Object.keys(kvData).length === 0);
 }
 
 // 10) state.js — admin manualMatchScores overlay merges onto feed matches by id.
@@ -1011,129 +941,11 @@ const baseBody = { name: "Daniel", pin: "1234", predictions: validPreds };
   ok("bracketFromFeed: fullTime fallback still works when score.winner missing", results.R32_3?.winner === "Argentina");
 }
 
-// ─── knockout API — lock behavior ────────────────────────────────────────────
+// ─── knockout API — spectator mode ───────────────────────────────────────────
 {
-  function makeKvPool(initial = {}) {
-    const kv = { ...initial };
-    return {
-      _kv: kv,
-      get: async (k, t) => { const v = kv[k]; if (!v) return null; return t === "json" ? JSON.parse(JSON.stringify(v)) : v; },
-      put: async (k, v) => { kv[k] = typeof v === "string" ? JSON.parse(v) : v; },
-      delete: async (k) => { delete kv[k]; },
-      list: async ({ prefix }) => ({ keys: Object.keys(kv).filter((k) => k.startsWith(prefix)).map((k) => ({ name: k })) }),
-    };
-  }
-  function req(body) { return { json: async () => body }; }
-
-  // Seed a group entry so PIN check passes.
-  const poolName = "Test Pool";
-  const pin = "1234";
-  const name = "Alice";
-  const POOL = makeKvPool({
-    "config": { poolName, adminHash: hashStr("adminpw"), createdAt: Date.now() },
-    "entry:alice": { name, pin, predictions: {} },
-  });
-  const env = { POOL };
-
-  const validPicks = { R32_1: "France" };
-
-  // Before lock: should save.
-  {
-    const origNow = Date;
-    global.Date = class extends Date { constructor(...a) { super(...a); } static now() { return new globalThis.Date(KNOCKOUT_LOCK_ISO).getTime() - 60000; } };
-    const r = await knockoutPost({ request: req({ name, pin, picks: validPicks }), env });
-    const d = await r.json();
-    ok("knockout API: before lock → saves ok", d.ok === true);
-    global.Date = origNow;
-  }
-
-  // After lock: should reject with 423.
-  {
-    const origNow = Date;
-    global.Date = class extends Date { constructor(...a) { super(...a); } static now() { return new globalThis.Date(KNOCKOUT_LOCK_ISO).getTime() + 60000; } };
-    const r = await knockoutPost({ request: req({ name, pin, picks: validPicks }), env });
-    ok("knockout API: after lock → 423", r.status === 423);
-    global.Date = origNow;
-  }
-
-  // Wrong PIN: should reject with 403.
-  {
-    const r = await knockoutPost({ request: req({ name, pin: "9999", picks: validPicks }), env });
-    ok("knockout API: wrong PIN → 403", r.status === 403);
-  }
-
-  // No matching entry: should reject with 404.
-  {
-    const r = await knockoutPost({ request: req({ name: "Nobody", pin, picks: validPicks }), env });
-    ok("knockout API: no group entry → 404", r.status === 404);
-  }
-
-  // Inconsistent pick: pick Spain for R16_1 but picked France and Brazil for R32_1/R32_2.
-  {
-    const origNow = Date;
-    global.Date = class extends Date { constructor(...a) { super(...a); } static now() { return new globalThis.Date(KNOCKOUT_LOCK_ISO).getTime() - 60000; } };
-    const r = await knockoutPost({ request: req({ name, pin, picks: { R32_1: "France", R32_2: "Brazil", R16_1: "Spain" } }), env });
-    global.Date = origNow;
-    ok("knockout API: inconsistent R16 pick → 400", r.status === 400);
-  }
-}
-
-// ─── admin setBracketMatch ───────────────────────────────────────────────────
-{
-  function makeKvPool(initial = {}) {
-    const kv = {};
-    for (const [k, v] of Object.entries(initial)) kv[k] = JSON.parse(JSON.stringify(v));
-    return {
-      _kv: kv,
-      get: async (k, t) => { const v = kv[k]; if (v == null) return null; return t === "json" ? JSON.parse(JSON.stringify(v)) : JSON.stringify(v); },
-      put: async (k, v) => { kv[k] = typeof v === "string" ? JSON.parse(v) : v; },
-      delete: async (k) => { delete kv[k]; },
-      list: async ({ prefix }) => ({ keys: Object.keys(kv).filter((k) => k.startsWith(prefix)).map((k) => ({ name: k })) }),
-    };
-  }
-  function req(body) { return { json: async () => body }; }
-
-  const POOL = makeKvPool({ config: { poolName: "T", adminHash: hashStr("pw"), createdAt: 0 } });
-  const env = { POOL };
-  const pw = "pw";
-
-  // Set a matchup.
-  {
-    const r = await adminPost({ request: req({ adminPassword: pw, action: "setBracketMatch", matchId: "R32_1", home: "France", away: "Brazil" }), env });
-    const d = await r.json();
-    ok("admin setBracketMatch: saves ok", d.ok === true);
-    ok("admin setBracketMatch: stored correctly", POOL._kv.knockoutBracket?.R32_1?.home === "France");
-  }
-
-  // Reject non-R32 matchId.
-  {
-    const r = await adminPost({ request: req({ adminPassword: pw, action: "setBracketMatch", matchId: "R16_1", home: "France", away: "Brazil" }), env });
-    ok("admin setBracketMatch: non-R32 matchId → 400", r.status === 400);
-  }
-
-  // Clear a matchup.
-  {
-    const r = await adminPost({ request: req({ adminPassword: pw, action: "setBracketMatch", matchId: "R32_1", home: "", away: "" }), env });
-    const d = await r.json();
-    ok("admin setBracketMatch: clear ok", d.ok === true);
-    ok("admin setBracketMatch: cleared from KV", !POOL._kv.knockoutBracket?.R32_1);
-  }
-
-  // setKnockoutResult.
-  {
-    const r = await adminPost({ request: req({ adminPassword: pw, action: "setKnockoutResult", matchId: "R32_1", winner: "France", status: "final" }), env });
-    const d = await r.json();
-    ok("admin setKnockoutResult: saves ok", d.ok === true);
-    ok("admin setKnockoutResult: stored in manualResults.knockout", POOL._kv.manualResults?.knockout?.R32_1?.winner === "France");
-  }
-
-  // Clear knockout result.
-  {
-    const r = await adminPost({ request: req({ adminPassword: pw, action: "setKnockoutResult", matchId: "R32_1", winner: "", status: "final" }), env });
-    const d = await r.json();
-    ok("admin setKnockoutResult clear: ok", d.ok === true);
-    ok("admin setKnockoutResult clear: removed", !POOL._kv.manualResults?.knockout?.R32_1);
-  }
+  const req = { json: async () => ({ name: "Alice", pin: "1234", picks: { R32_1: "France" } }) };
+  const res = await knockoutPost({ request: req, env: { POOL: null } });
+  ok("knockout API: POST returns 410 (spectator mode)", res.status === 410);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
